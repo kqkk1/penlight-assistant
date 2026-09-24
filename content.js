@@ -1,6 +1,5 @@
 /**
- * Penlight Supporter Helper (for MIX PENLa PRO-361)
- * Smart Timestamp & Highly Optimized - v3.5.0 
+ * Penlight Supporter Helper (for MIX PENLa PRO-361) - v3.6.0
  */
 (() => {
   "use strict";
@@ -191,7 +190,6 @@
 
         const items = [];
         const seen = new Set();
-        const nameCount = {};
 
         for (let i = 1; i < rows.length; i++) {
           const cols = rows[i];
@@ -201,7 +199,6 @@
           const c_norm = cols[1] ? cols[1].replace(/^"|"$/g, "").trim() : "";
           const p_normRaw = cols[2] ? cols[2].replace(/^"|"$/g, "").trim() : "";
           const unit = cols[3] ? cols[3].replace(/^"|"$/g, "").trim() : "";
-
           const c_var = cols[4] ? cols[4].replace(/^"|"$/g, "").trim() : "";
           const p_varRaw = cols[5] ? cols[5].replace(/^"|"$/g, "").trim() : "";
 
@@ -215,7 +212,6 @@
           const p_var = p_varMatch ? p_varMatch[0].toUpperCase() : p_varRaw.replace(/\s*△.*/, "").trim();
 
           if (name && p_norm && !seen.has(name)) {
-            // D列や名前から役割を自動判定
             let role = "idol";
             if (/ブランド/.test(unit) || /ブランド|プロ|プロダクション|学園/i.test(name)) {
               role = "brand";
@@ -225,10 +221,7 @@
               role = "unit_color";
             }
 
-            if (!nameCount[name]) nameCount[name] = 0;
-            nameCount[name]++;
             seen.add(name);
-
             items.push({ 
               n: name, 
               c: c_norm, 
@@ -242,11 +235,6 @@
             });
           }
         }
-
-        items.forEach(it => {
-          it.isVariant = false; 
-          it.hasVariant = !!(it.c_v && it.p_v); 
-        });
 
         localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), data: items }));
         return items;
@@ -336,7 +324,6 @@
       this.app = app;
       this.store = store;
       this.site = siteAdapter;
-      this.isMin = false;
       this.savedHeight = "";
       this.isQueueOpen = false;
       this.els = {};
@@ -491,7 +478,6 @@
       };
     }
 
-    // ★ 最終取得時間のツールチップ更新メソッド
     updateReloadTooltip() {
       const cacheKey = `ps_cache_${this.store.currentBrand}`;
       try {
@@ -582,7 +568,9 @@
       this.els.saBtn.onclick = () => {
         this.store.getVisibleList().forEach(it => {
           const key = `${it.brand}:${it.n}`;
-          if (!this.store.selected.has(key)) this.store.toggleSelection(key, it);
+          if (!this.store.selected.has(key)) {
+            this.store.selected.set(key, { ...it, selectOrder: ++this.store.counter });
+          }
         });
         this.renderQueue(); this.renderList();
       };
@@ -611,13 +599,7 @@
           const item = (this.store.cache[this.store.currentBrand] || []).find(it => `${it.brand}:${it.n}` === key);
           if (item) {
             if (e.target.checked) {
-              const savedItem = {
-                ...item,
-                c: this.store.getActiveColor(item),
-                p: this.store.getActivePen(item),
-                isForcedVariant: this.store.showVariant
-              };
-              this.store.selected.set(key, { ...savedItem, selectOrder: ++this.store.counter });
+              this.store.selected.set(key, { ...item, selectOrder: ++this.store.counter });
             } else {
               this.store.selected.delete(key);
             }
@@ -699,13 +681,7 @@
               if (cleanText.includes(cleanName)) {
                 const key = `${it.brand}:${it.n}`;
                 if (!this.store.selected.has(key)) {
-                  const savedItem = {
-                    ...it,
-                    c: this.store.getActiveColor(it),
-                    p: this.store.getActivePen(it),
-                    isForcedVariant: this.store.showVariant
-                  };
-                  this.store.selected.set(key, { ...savedItem, selectOrder: ++this.store.counter });
+                  this.store.selected.set(key, { ...it, selectOrder: ++this.store.counter });
                   addedCount++;
                 }
               }
@@ -731,15 +707,11 @@
         
         const exportPayload = {
           showVariant: this.store.showVariant, 
-          items: data.map(it => ({
-            ...it,
-            c: it.isForcedVariant && it.c_v ? it.c_v : this.store.getActiveColor(it),
-            p: it.isForcedVariant && it.p_v ? it.p_v : this.store.getActivePen(it)
-          }))
+          items: data
         };
 
         const str = btoa(encodeURIComponent(JSON.stringify(exportPayload)));
-        navigator.clipboard.writeText(str).then(() => alert("リストのコードをコピーしました（トグル状態も保存されました）！")).catch(() => alert("コピーに失敗しました。"));
+        navigator.clipboard.writeText(str).then(() => alert("リストのコードをコピーしました（特殊色の状態も保存されました）！")).catch(() => alert("コピーに失敗しました。"));
       };
 
       this.els.importBtn.onclick = () => {
@@ -765,14 +737,22 @@
             }
 
             this.store.clearSelection();
+            let added = 0;
             itemsArray.forEach(it => {
+              if (!it || typeof it.n !== 'string' || typeof it.brand !== 'string') return;
+              
               this.store.counter = Math.max(this.store.counter, it.selectOrder || 0);
               this.store.selected.set(`${it.brand}:${it.n}`, it);
+              added++;
             });
 
-            this.renderQueue(); 
-            this.renderList();
-            alert(`リストを読み込みました！\n（特殊色トグル: ${targetShowVariant ? 'ON' : 'OFF'} に自動設定しました）`);
+            if (added > 0) {
+              this.renderQueue(); 
+              this.renderList();
+              alert(`リストを読み込みました！\n（特殊色トグル: ${targetShowVariant ? 'ON' : 'OFF'} に自動設定しました）`);
+            } else {
+              alert("有効なアイドルデータが見つかりませんでした。");
+            }
           }
         } catch (e) { alert("無効なコードです。"); }
       };
@@ -793,8 +773,8 @@
       }
       const isManualSort = this.store.sortMode === "select";
       this.els.queueList.innerHTML = this.store.getSortedSelectedList(this.site.getRankCalculator()).map(it => {
-        const activeColor = it.isForcedVariant && it.c_v ? it.c_v : this.store.getActiveColor(it);
-        const activePen = it.isForcedVariant && it.p_v ? it.p_v : this.store.getActivePen(it);
+        const activeColor = this.store.getActiveColor(it);
+        const activePen = this.store.getActivePen(it);
 
         const escKey = Utils.escapeHtml(`${it.brand}:${it.n}`);
         const escN = Utils.escapeHtml(it.n);
@@ -911,11 +891,13 @@
       this.siteAdapter.buildCache();
 
       let count = 0;
+      let skippedList = []; 
+
       for (let i = 0; i < targets.length; i++) {
         const it = targets[i];
         this.ui.els.runBtn.textContent = `[${i + 1}/${targets.length}] ${it.n}...`;
         
-        const activePen = it.isForcedVariant && it.p_v ? it.p_v : this.store.getActivePen(it);
+        const activePen = this.store.getActivePen(it);
         const targetBtn = this.siteAdapter.getButton(activePen);
         
         if (targetBtn) {
@@ -946,11 +928,18 @@
 
           count++;
           await Utils.sleep(60);
+        } else {
+          skippedList.push(`・${it.n} (コード: ${activePen})`);
         }
       }
 
       this.ui.els.runBtn.disabled = false;
       this.ui.els.runBtn.textContent = `完了 (${count}/${targets.length}件)`;
+      
+      if (skippedList.length > 0) {
+        alert(`処理が完了しましたが、以下のメンバーは公式ツールに該当のペンライトコードが存在しないためスキップされました：\n\n${skippedList.join('\n')}\n\n※スプレッドシートのコード入力に誤りがないか確認してください。`);
+      }
+
       setTimeout(() => { this.ui.els.runBtn.textContent = "リストに追加する"; }, 2000);
     }
   }

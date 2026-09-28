@@ -1,6 +1,6 @@
 /**
  * Penlight Supporter Helper (for MIX PENLa PRO)
- * Version: 4.1.0
+ * Version: 4.2.0
  */
 (() => {
   "use strict";
@@ -8,68 +8,47 @@
   if (window.__psHelperLoaded) return;
   window.__psHelperLoaded = true;
 
-  const CURRENT_VERSION = "4.1.0";
+  const CURRENT_VERSION = "4.2.0";
   
   const CONFIG = {
     GITHUB_REPO: "kqkk1/penlight-assistant",
     DEFAULT_SPREADSHEET_ID: "1qQ1ezrI5ujr4YIi4hO3EmPSLRTULKtSSV_LQ1Q6SNGo",
     SHEETS: ["765AS", "ミリオン", "学マス", "デレマス", "シャニマス", "SideM", "876", "その他"],
-    FAV_STORAGE_KEY: "ps_fav_idols_v2",
-    CUSTOM_ID_KEY: "ps_custom_sheet_id",
-    PEN_MODE_KEY: "ps_pen_mode",
-    MERGE_DUP_KEY: "ps_merge_dup",
+    KEYS: { FAV: "ps_fav_idols_v2", ID: "ps_custom_sheet_id", PEN: "ps_pen_mode", DUP: "ps_merge_dup", SORT: "ps_sort_mode" },
     CACHE_EXPIRY: 24 * 60 * 60 * 1000,
     GROUP_ORDER: { R: 1, P: 2, V: 3, B: 4, GB: 5, G: 6, Y: 7, O: 8, W: 9, H: 10, D: 11 },
     EXCLUDE_ROLES: ["ブランド", "事務員", "ユニット"]
   };
 
   const Utils = {
-    sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
-    escapeHtml: (str) => String(str || "").replace(/[&<>"']/g, m => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[m])),
-    simulateClick: (el) => {
+    sleep: ms => new Promise(r => setTimeout(r, ms)),
+    escapeHtml: str => String(str || "").replace(/[&<>"']/g, m => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[m])),
+    simulateClick: el => {
       if (!el) return;
       const opts = { bubbles: true, cancelable: true, view: window };
-      el.dispatchEvent(new PointerEvent("pointerdown", opts));
-      el.dispatchEvent(new MouseEvent("mousedown", opts));
-      el.dispatchEvent(new PointerEvent("pointerup", opts));
-      el.dispatchEvent(new MouseEvent("mouseup", opts));
+      ["pointerdown", "mousedown", "pointerup", "mouseup"].forEach(e => el.dispatchEvent(new Event(e, opts)));
       el.click();
     },
     setInputValue: (input, value) => {
       if (!input) return;
       try {
-        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-        nativeSetter.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-      } catch (e) {
-        input.value = value;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-      }
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(input, value);
+      } catch (e) { input.value = value; }
+      ["input", "change"].forEach(e => input.dispatchEvent(new Event(e, { bubbles: true })));
     },
-    parseCSV: (text) => {
-      const rows = [];
-      let row = [], cur = "", inQuotes = false;
+    parseCSV: text => {
+      const rows = []; let row = [], cur = "", inQuotes = false;
       for (let i = 0; i < text.length; i++) {
         const c = text[i], next = text[i + 1];
-        if (c === '"') {
-          if (inQuotes && next === '"') { cur += '"'; i++; }
-          else { inQuotes = !inQuotes; }
-        } else if (c === ',' && !inQuotes) {
-          row.push(cur.trim()); cur = "";
-        } else if ((c === '\r' || c === '\n') && !inQuotes) {
+        if (c === '"') { inQuotes && next === '"' ? (cur += '"', i++) : (inQuotes = !inQuotes); }
+        else if (c === ',' && !inQuotes) { row.push(cur.trim()); cur = ""; }
+        else if ((c === '\r' || c === '\n') && !inQuotes) {
           if (c === '\r' && next === '\n') i++;
-          row.push(cur.trim());
-          if (row.some(x => x !== "")) rows.push(row);
+          row.push(cur.trim()); if (row.some(x => x !== "")) rows.push(row);
           row = []; cur = "";
-        } else {
-          cur += c;
-        }
+        } else cur += c;
       }
-      if (cur !== "" || row.length > 0) {
-        row.push(cur.trim());
-        if (row.some(x => x !== "")) rows.push(row);
-      }
+      if (cur !== "" || row.length > 0) { row.push(cur.trim()); if (row.some(x => x !== "")) rows.push(row); }
       return rows;
     }
   };
@@ -78,81 +57,60 @@
     constructor() {
       this.cache = {}; this.selected = new Map(); this.counter = 0;
       this.showBrand = true; this.showStaff = true; this.showUnitColor = true; this.showVariant = false; 
-      this.sortMode = "select";
-      this.penMode = localStorage.getItem(CONFIG.PEN_MODE_KEY) || "361";
-      this.mergeDuplicates = localStorage.getItem(CONFIG.MERGE_DUP_KEY) === "true";
+      this.sortMode = localStorage.getItem(CONFIG.KEYS.SORT) || "select";
+      this.penMode = localStorage.getItem(CONFIG.KEYS.PEN) || "361";
+      this.mergeDuplicates = localStorage.getItem(CONFIG.KEYS.DUP) === "true";
       this.searchQuery = ""; this.selectedUnit = "";
       this.currentBrand = CONFIG.SHEETS[0];
-      this.favorites = new Set(JSON.parse(localStorage.getItem(CONFIG.FAV_STORAGE_KEY) || "[]"));
+      this.favorites = new Set(JSON.parse(localStorage.getItem(CONFIG.KEYS.FAV) || "[]"));
     }
     getActiveColor(it) { return (this.showVariant && it.c_v) ? it.c_v : (it.c || '#fff'); }
     getActivePen(it) { 
-      let code = "";
-      if (this.showVariant) {
-        code = this.penMode === "361" ? it.p_v_361 : it.p_v_56;
-        if (!code) code = this.penMode === "361" ? it.p_361 : it.p_56;
-      } else {
-        code = this.penMode === "361" ? it.p_361 : it.p_56;
-      }
+      let code = this.showVariant ? (this.penMode === "361" ? it.p_v_361 : it.p_v_56) : "";
+      if (!code) code = this.penMode === "361" ? it.p_361 : it.p_56;
       return code || "--";
     }
-    setPenMode(mode) { this.penMode = mode; localStorage.setItem(CONFIG.PEN_MODE_KEY, mode); }
-    toggleMergeDuplicates(val) { this.mergeDuplicates = val; localStorage.setItem(CONFIG.MERGE_DUP_KEY, val); }
+    setPref(key, val, storeKey) { this[key] = val; localStorage.setItem(CONFIG.KEYS[storeKey], val); }
     toggleFavorite(key) {
       this.favorites.has(key) ? this.favorites.delete(key) : this.favorites.add(key);
-      localStorage.setItem(CONFIG.FAV_STORAGE_KEY, JSON.stringify(Array.from(this.favorites)));
-    }
-    toggleSelection(key, item) {
-      if (this.selected.has(key)) this.selected.delete(key);
-      else this.selected.set(key, { ...item, selectOrder: ++this.counter });
+      localStorage.setItem(CONFIG.KEYS.FAV, JSON.stringify([...this.favorites]));
     }
     clearSelection() { this.selected.clear(); this.counter = 0; }
     reorderSelection(draggedKey, targetKey) {
       if (this.sortMode !== "select") return;
-      const arr = Array.from(this.selected.values()).sort((a, b) => (a.selectOrder || 0) - (b.selectOrder || 0));
-      const draggedIdx = arr.findIndex(it => `${it.brand}:${it.n}` === draggedKey);
-      const targetIdx = arr.findIndex(it => `${it.brand}:${it.n}` === targetKey);
-      if (draggedIdx < 0 || targetIdx < 0) return;
-      const [draggedItem] = arr.splice(draggedIdx, 1);
-      arr.splice(targetIdx, 0, draggedItem);
+      const arr = [...this.selected.values()].sort((a, b) => (a.selectOrder || 0) - (b.selectOrder || 0));
+      const [dIdx, tIdx] = [draggedKey, targetKey].map(k => arr.findIndex(it => `${it.brand}:${it.n}` === k));
+      if (dIdx < 0 || tIdx < 0) return;
+      arr.splice(tIdx, 0, arr.splice(dIdx, 1)[0]);
       arr.forEach((it, idx) => it.selectOrder = idx + 1);
-      this.counter = arr.length;
     }
     getVisibleList() {
       const list = this.cache[this.currentBrand] || [];
-      const query = this.searchQuery;
       return list.filter(it => {
         if (it.role === "brand" && !this.showBrand) return false;
         if (it.role === "staff" && !this.showStaff) return false;
-        if (it.role === "unit_color" && !this.showUnitColor && (!this.selectedUnit || it.unit !== this.selectedUnit)) return false;
+        if (it.role === "unit_color" && !this.showUnitColor && it.unit !== this.selectedUnit) return false;
         if (this.selectedUnit && it.unit !== this.selectedUnit) return false;
-        if (query && !it.n.toLowerCase().includes(query)) return false;
+        if (this.searchQuery && !it.n.toLowerCase().includes(this.searchQuery)) return false;
         return true;
       }).sort((a, b) => {
-        const getPriority = (item) => {
-          if (this.favorites.has(`${item.brand}:${item.n}`)) return 50;
-          if (item.role === "brand") return 40;
-          if (item.role === "staff") return 30;
-          if (item.role === "unit_color") return 20;
-          return 0;
-        };
-        const diff = getPriority(b) - getPriority(a);
-        return diff !== 0 ? diff : (a.rawIndex || 0) - (b.rawIndex || 0);
+        const priority = i => this.favorites.has(`${i.brand}:${i.n}`) ? 50 : (i.role === "brand" ? 40 : (i.role === "staff" ? 30 : (i.role === "unit_color" ? 20 : 0)));
+        return (priority(b) - priority(a)) || ((a.rawIndex || 0) - (b.rawIndex || 0));
       });
     }
     getSortedSelectedList(rankCalculator) {
-      const arr = Array.from(this.selected.values());
-      return this.sortMode === "code"
-        ? arr.sort((a, b) => rankCalculator(this.getActivePen(a)) - rankCalculator(this.getActivePen(b)))
-        : arr.sort((a, b) => (a.selectOrder || 0) - (b.selectOrder || 0));
+      return [...this.selected.values()].sort((a, b) => {
+        if (this.sortMode === "code") return rankCalculator(this.getActivePen(a)) - rankCalculator(this.getActivePen(b));
+        if (this.sortMode === "preset") return rankCalculator(a.sort_code || this.getActivePen(a)) - rankCalculator(b.sort_code || this.getActivePen(b));
+        return (a.selectOrder || 0) - (b.selectOrder || 0);
+      });
     }
     getUnits() {
-      return Array.from(new Set((this.cache[this.currentBrand] || []).map(it => it.unit).filter(u => u && !CONFIG.EXCLUDE_ROLES.includes(u))));
+      return [...new Set((this.cache[this.currentBrand] || []).map(it => it.unit).filter(u => u && !CONFIG.EXCLUDE_ROLES.includes(u)))];
     }
   }
 
   class DataFetcher {
-    static getTargetSpreadsheetId() { return localStorage.getItem(CONFIG.CUSTOM_ID_KEY) || CONFIG.DEFAULT_SPREADSHEET_ID; }
     static async fetch(sheetName, force = false) {
       const cacheKey = `ps_cache_${sheetName}`;
       if (!force) {
@@ -162,43 +120,29 @@
         } catch (e) {}
       }
       try {
-        const targetId = this.getTargetSpreadsheetId();
-        const url = `https://docs.google.com/spreadsheets/d/${targetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}&_=${Date.now()}`;
-        const res = await fetch(url);
+        const targetId = localStorage.getItem(CONFIG.KEYS.ID) || CONFIG.DEFAULT_SPREADSHEET_ID;
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${targetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}&_=${Date.now()}`);
         if (!res.ok) throw new Error("Network error");
         const rows = Utils.parseCSV(await res.text());
         if (rows.length <= 1) return [];
 
-        const items = [];
-        const seen = new Set();
-        const extractCode = (raw) => {
-          if (!raw) return "";
-          const match = raw.match(/[A-Za-z]+[0-9]+(?:-[0-9]+)?/);
-          return match ? match[0].toUpperCase() : raw.replace(/\s*△.*/, "").trim();
-        };
+        const items = [], seen = new Set();
+        const ext = r => r ? (r.match(/[A-Za-z]+[0-9]+(?:-[0-9]+)?/)?.[0].toUpperCase() || r.replace(/\s*△.*/, "").trim()) : "";
+        const clean = c => c ? c.replace(/^"|"$/g, "").trim() : "";
+        
         for (let i = 1; i < rows.length; i++) {
-          const cols = rows[i];
-          if (cols.length < 3) continue;
-          let name   = cols[0] ? cols[0].replace(/^"|"$/g, "").trim() : "";
-          const c    = cols[1] ? cols[1].replace(/^"|"$/g, "").trim() : "";
-          const p361 = extractCode(cols[2] ? cols[2].replace(/^"|"$/g, "").trim() : "");
-          const p56  = extractCode(cols[3] ? cols[3].replace(/^"|"$/g, "").trim() : "");
-          const unit = cols[4] ? cols[4].replace(/^"|"$/g, "").trim() : "";
-          const c_v  = cols[5] ? cols[5].replace(/^"|"$/g, "").trim() : "";
-          const pv361= extractCode(cols[6] ? cols[6].replace(/^"|"$/g, "").trim() : "");
-          const pv56 = extractCode(cols[7] ? cols[7].replace(/^"|"$/g, "").trim() : "");
-
-          if (sheetName !== "765AS" && name === "天海春香" && items.length === 0) return [];
+          const cols = rows[i]; if (cols.length < 3) continue;
+          let name = clean(cols[0]);
+          if (sheetName !== "765AS" && name === "天海春香" && !items.length) return [];
           if (sheetName === "876" && name.includes("秋月涼")) name = "秋月涼";
 
+          const [p361, p56, unit, sortCode] = [ext(clean(cols[2])), ext(clean(cols[3])), clean(cols[4]), ext(clean(cols[8]))];
           if (name && (p361 || p56) && !seen.has(name)) {
-            let role = "idol";
-            if (/ブランド/.test(unit) || /ブランド|プロ|プロダクション|学園/i.test(name)) role = "brand";
-            else if (/事務員/.test(unit) || /事務員|小鳥|美咲|ちひろ|はづき|山村|亜紗里|社長/i.test(name)) role = "staff";
-            else if (/ユニット|色|カラー/.test(unit) || /ユニット|色|カラー/i.test(name)) role = "unit_color";
-
+            let role = /ブランド|プロ|プロダクション|学園/.test(name) || /ブランド/.test(unit) ? "brand" :
+                       /事務員|小鳥|美咲|ちひろ|はづき|山村|亜紗里|社長/.test(name) || /事務員/.test(unit) ? "staff" :
+                       /ユニット|色|カラー/.test(name) || /ユニット|色|カラー/.test(unit) ? "unit_color" : "idol";
             seen.add(name);
-            items.push({ n: name, c, p_361: p361, p_56: p56, c_v, p_v_361: pv361, p_v_56: pv56, brand: sheetName, role, unit, rawIndex: i });
+            items.push({ n: name, c: clean(cols[1]), p_361: p361, p_56: p56, unit, c_v: clean(cols[5]), p_v_361: ext(clean(cols[6])), p_v_56: ext(clean(cols[7])), sort_code: sortCode, brand: sheetName, role, rawIndex: i });
           }
         }
         localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), data: items }));
@@ -208,12 +152,12 @@
   }
 
   class SiteAdapter {
-    constructor() { this.btnCache = new Map(); this.indexMap = new Map(); this.observer = null; this.cacheTimer = null; }
+    constructor() { this.btnCache = new Map(); this.indexMap = new Map(); }
     startObserving() {
       if (this.observer) return;
-      this.observer = new MutationObserver((mutations) => {
-        if (mutations.some(m => m.addedNodes.length > 0)) {
-          if (this.cacheTimer) clearTimeout(this.cacheTimer);
+      this.observer = new MutationObserver(m => {
+        if (m.some(x => x.addedNodes.length)) {
+          clearTimeout(this.cacheTimer);
           this.cacheTimer = setTimeout(() => this.buildCache(), 300);
         }
       });
@@ -222,57 +166,47 @@
     buildCache() {
       this.btnCache.clear(); this.indexMap.clear();
       document.querySelectorAll("button[title]").forEach(btn => {
-        const title = (btn.getAttribute("title") || "").trim();
-        const match = title.match(/^#(\d+)\s+([A-Z0-9\-]+)/i);
-        if (match) {
-          const code = match[2].toUpperCase();
-          this.indexMap.set(code, parseInt(match[1], 10));
-          this.btnCache.set(code, btn);
-        }
+        const m = (btn.getAttribute("title") || "").match(/^#(\d+)\s+([A-Z0-9\-]+)/i);
+        if (m) { this.indexMap.set(m[2].toUpperCase(), parseInt(m[1], 10)); this.btnCache.set(m[2].toUpperCase(), btn); }
       });
     }
     getButton(code) {
       if (code === "--") return null;
-      if (this.btnCache.size === 0) this.buildCache();
-      const cleanCode = (code || "").trim().toUpperCase();
-      let btn = this.btnCache.get(cleanCode);
-      if (!btn || !document.body.contains(btn)) { this.buildCache(); btn = this.btnCache.get(cleanCode); }
+      if (!this.btnCache.size) this.buildCache();
+      const c = (code || "").trim().toUpperCase();
+      let btn = this.btnCache.get(c);
+      if (!btn || !document.body.contains(btn)) { this.buildCache(); btn = this.btnCache.get(c); }
       return btn || null;
     }
     getRankCalculator() {
-      return (codeStr) => {
+      return codeStr => {
         if (codeStr === "--") return 999999;
         const code = (codeStr || "").trim().toUpperCase();
-        if (this.indexMap.size === 0) this.buildCache();
+        if (!this.indexMap.size) this.buildCache();
         if (this.indexMap.has(code)) return this.indexMap.get(code);
         const m = code.match(/^([A-Z]+)(\d+)?(?:-(\d+))?/);
-        if (!m) return 99999;
-        return (CONFIG.GROUP_ORDER[m[1]] || 90) * 10000 + (parseInt(m[2] || "0", 10) * 100) + parseInt(m[3] || "0", 10);
+        return m ? (CONFIG.GROUP_ORDER[m[1]] || 90) * 10000 + (parseInt(m[2] || "0", 10) * 100) + parseInt(m[3] || "0", 10) : 99999;
       };
     }
     getSiteInputs() {
       const container = document.getElementById("ps-m");
-      return Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])')).filter(x => container ? !container.contains(x) : true);
+      return [...document.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])')].filter(x => !container?.contains(x));
     }
     getEditButtons() {
       const container = document.getElementById("ps-m");
-      return Array.from(document.querySelectorAll('button[aria-label="タイトルを編集"]')).filter(x => container ? !container.contains(x) : true);
+      return [...document.querySelectorAll('button[aria-label="タイトルを編集"]')].filter(x => !container?.contains(x));
     }
   }
 
   class UIManager {
-    constructor(app, store, siteAdapter) {
-      this.app = app; this.store = store; this.site = siteAdapter;
-      this.savedHeight = ""; this.isQueueOpen = false; this.els = {};
+    constructor(app, store, site) {
+      this.app = app; this.store = store; this.site = site;
+      this.els = {}; this.isQueueOpen = false;
     }
 
     inject() {
       if (document.getElementById("ps-m")) return false;
-      this.injectStyles();
-      this.buildHTML();
-      this.cacheElements();
-      this.bindEvents();
-      this.checkUpdate();
+      this.injectStyles(); this.buildHTML(); this.cacheElements(); this.bindEvents(); this.checkUpdate();
       return true;
     }
 
@@ -281,369 +215,337 @@
       try {
         const res = await fetch(`https://api.github.com/repos/${CONFIG.GITHUB_REPO}/releases/latest`);
         if (!res.ok) return; 
-        const data = await res.json();
-        const latestTag = data.tag_name || "";
-        const latestVer = latestTag.replace(/^v/, "");
+        const latestVer = (await res.json()).tag_name?.replace(/^v/, "");
         if (latestVer && latestVer !== CURRENT_VERSION) {
-          const banner = document.createElement("div");
-          banner.style.cssText = "background:#ff9e64;color:#15161e;font-weight:bold;font-size:11px;padding:6px;text-align:center;cursor:pointer;border-radius:4px;margin-bottom:6px;flex-shrink:0;";
-          banner.innerHTML = `📢 新バージョン(v${latestVer})が公開されています！クリックして更新ページへ`;
-          banner.onclick = () => window.open(`https://github.com/${CONFIG.GITHUB_REPO}/releases/latest`, "_blank");
-          this.els.body.insertBefore(banner, this.els.body.firstChild);
+          const b = document.createElement("div");
+          b.style.cssText = "background:#ff9e64;color:#15161e;font-weight:bold;font-size:11px;padding:6px;text-align:center;cursor:pointer;border-radius:4px;margin-bottom:6px;flex-shrink:0;";
+          b.innerHTML = `📢 新バージョン(v${latestVer})が公開されています！クリックして更新ページへ`;
+          b.onclick = () => window.open(`https://github.com/${CONFIG.GITHUB_REPO}/releases/latest`, "_blank");
+          this.els.body.insertBefore(b, this.els.body.firstChild);
         }
-      } catch (e) { }
+      } catch (e) {}
     }
 
     injectStyles() {
-      const style = document.createElement("style");
-      style.textContent = `
-        #ps-m { position:fixed; top:18px; right:18px; width:500px; height:750px; min-width:280px; min-height:240px; max-width:95vw; max-height:94vh; background:#1a1b26; color:#c0caf5; border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.85); z-index:999999999; padding:12px; display:flex; flex-direction:column; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size:12px; border:1px solid #7aa2f7; box-sizing:border-box; transition: height 0.3s ease; }
+      const s = document.createElement("style");
+      s.textContent = `
+        /* ★アニメーション(transition)を削除し、瞬時にリサイズされるように最適化 */
+        #ps-m { position:fixed; top:18px; right:18px; width:500px; height:750px; min-width:280px; min-height:240px; max-width:95vw; max-height:94vh; background:#1a1b26; color:#c0caf5; border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.85); z-index:999999999; padding:12px; display:flex; flex-direction:column; font-family:-apple-system,sans-serif; font-size:12px; border:1px solid #7aa2f7; box-sizing:border-box; }
         #ps-m * { box-sizing:border-box; }
-        #ps-resize-handle { position:absolute; left:0; bottom:0; width:16px; height:16px; cursor:nesw-resize; z-index:10; display:flex; align-items:flex-end; justify-content:flex-start; padding:2px; }
-        #ps-resize-handle::after { content:""; width:6px; height:6px; border-left:2px solid #565f89; border-bottom:2px solid #565f89; pointer-events:none; }
+        #ps-resize-handle { position:absolute; left:0; bottom:0; width:16px; height:16px; cursor:nesw-resize; z-index:10; display:flex; align-items:flex-end; padding:2px; }
+        #ps-resize-handle::after { content:""; width:6px; height:6px; border-left:2px solid #565f89; border-bottom:2px solid #565f89; }
         #ps-resize-handle:hover::after { border-color:#7aa2f7; }
-        #ps-fab { position:fixed; bottom:24px; right:24px; width:48px; height:48px; background:#7aa2f7; color:#15161e; border-radius:50%; box-shadow:0 8px 16px rgba(0,0,0,0.6); z-index:999999999; display:flex; justify-content:center; align-items:center; cursor:pointer; font-size:24px; user-select:none; transition:transform 0.15s ease, filter 0.15s ease; border: 2px solid #1a1b26; }
+        #ps-fab { position:fixed; bottom:24px; right:24px; width:48px; height:48px; background:#7aa2f7; color:#15161e; border-radius:50%; box-shadow:0 8px 16px rgba(0,0,0,0.6); z-index:999999999; display:flex; justify-content:center; align-items:center; cursor:pointer; font-size:24px; user-select:none; transition:0.15s ease; border: 2px solid #1a1b26; }
         #ps-fab:hover { transform:scale(1.1); filter:brightness(1.1); }
         .ps-btn { padding:4px 8px; border:none; border-radius:4px; cursor:pointer; font-size:11px; background:#24283b; color:#a9b1d6; transition:0.12s ease; user-select:none; }
         .ps-btn:hover { filter:brightness(1.2); color:#fff; }
         .ps-btn-primary { background:#7aa2f7; color:#15161e; font-weight:bold; }
         .ps-btn-primary:hover { background:#89b4fa; color:#15161e; }
+        .ps-opt-btn { padding: 4px 8px; font-size: 10px; flex: 1; text-align: center; }
         .ps-input { background:#1f2335; color:#fff; border:1px solid #3b4261; border-radius:4px; padding:5px 8px; font-size:11px; outline:none; }
         .ps-input:focus { border-color:#7aa2f7; }
-        .ps-tag-brand { font-size:9px; color:#7aa2f7; background:#1f293d; border:1px solid #3d59a1; padding:1px 4px; border-radius:3px; margin-left:4px; }
-        .ps-tag-staff { font-size:9px; color:#9ece6a; background:#1e2d24; border:1px solid #41a6b5; padding:1px 4px; border-radius:3px; margin-left:4px; }
-        .ps-tag-unit { font-size:9px; color:#ff9e64; background:#2d201a; border:1px solid #8f5a34; padding:1px 4px; border-radius:3px; margin-left:4px; font-weight:bold; }
         
+        .ps-segment { display:flex; background:#1a1b26; border-radius:6px; border:1px solid #3b4261; overflow:hidden; height:24px; }
+        .ps-segment label, .ps-segment button { flex:1; display:flex; align-items:center; justify-content:center; font-size:10px; cursor:pointer; color:#9aa5ce; transition:0.15s; border:none; border-right:1px solid #3b4261; background:transparent; margin:0; line-height:1; }
+        .ps-segment label:last-child, .ps-segment button:last-child { border-right:none; }
+        .ps-segment label:hover, .ps-segment button:hover { background:#24283b; color:#fff; }
+        .ps-segment input[type="radio"] { display:none; }
+        .ps-segment input[type="radio"]:checked + span { color:#15161e; background:#7aa2f7; width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-weight:bold; }
+        .ps-segment button.active { color:#15161e; background:#7aa2f7; font-weight:bold; }
+
+        .ps-opt-group { display:flex; align-items:center; gap:8px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #2f3549; }
+        .ps-opt-group:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
+        .ps-opt-lbl { font-size:10px; color:#565f89; width:40px; flex-shrink:0; text-align:right; font-weight:bold; }
+
+        .ps-tag { font-size:9px; padding:1px 4px; border-radius:3px; margin-left:4px; }
+        .ps-tag-brand { color:#7aa2f7; background:#1f293d; border:1px solid #3d59a1; }
+        .ps-tag-staff { color:#9ece6a; background:#1e2d24; border:1px solid #41a6b5; }
+        .ps-tag-unit { color:#ff9e64; background:#2d201a; border:1px solid #8f5a34; font-weight:bold; }
         .ps-row { display:flex; align-items:center; gap:6px; padding:5px 6px; border-radius:4px; transition:0.1s; user-select:none; cursor:pointer; }
         .ps-row:hover { background:#24283b; }
         .ps-row.selected { background:#1e2538; }
         .ps-k { cursor:pointer; flex-shrink:0; }
         .ps-badge { display:inline-flex; align-items:center; gap:3px; background:#24283b; border:1px solid #414868; padding:2px 6px; border-radius:3px; font-size:11px; }
-        .ps-star-btn { background:none; border:none; font-size:15px; line-height:1; cursor:pointer; padding:0 6px; color:#565f89; flex-shrink:0; transition:transform 0.12s,color 0.12s; }
+        .ps-star-btn { background:none; border:none; font-size:15px; line-height:1; cursor:pointer; padding:0 6px; color:#565f89; flex-shrink:0; transition:0.12s; }
         .ps-star-btn:hover { transform:scale(1.2); color:#e0af68; }
         .ps-star-btn.active { color:#e0af68 !important; text-shadow:0 0 6px rgba(224,175,104,0.5); }
         .ps-chip { padding:2px 7px; border-radius:10px; font-size:10px; cursor:pointer; background:#1f2335; color:#9aa5ce; border:1px solid #3b4261; white-space:nowrap; user-select:none; transition:0.12s; }
         .ps-chip:hover { background:#24283b; color:#fff; }
         .ps-chip.active { background:#7aa2f722; color:#7aa2f7; border-color:#7aa2f7; font-weight:bold; }
-        .ps-drag-item { transition: transform 0.1s, opacity 0.1s; }
+        .ps-drag-item { transition: 0.1s; }
         .ps-drag-item.dragging { opacity: 0.4; transform: scale(0.95); }
         .ps-drag-item.drag-over { border: 1px dashed #7aa2f7; filter: brightness(1.3); }
         .ps-drag-handle { cursor: grab; padding-right: 4px; color: #565f89; user-select: none; }
-        .ps-radio-group { display:flex; background:#1f2335; border-radius:4px; border:1px solid #3b4261; overflow:hidden; }
-        .ps-radio-group label { flex:1; text-align:center; padding:3px 0; font-size:10px; cursor:pointer; color:#9aa5ce; transition:0.1s; border-right:1px solid #3b4261; }
-        .ps-radio-group label:last-child { border-right:none; }
-        .ps-radio-group input { display:none; }
-        .ps-radio-group input:checked + span { color:#15161e; background:#7aa2f7; display:block; height:100%; font-weight:bold; }
-        .ps-opt-group { display:flex; align-items:center; gap:6px; margin-bottom:4px; padding-bottom:4px; border-bottom:1px solid #2f3549; }
-        .ps-opt-group:last-child { margin-bottom:0; padding-bottom:0; border-bottom:none; }
-        .ps-opt-lbl { font-size:10px; color:#565f89; width:35px; flex-shrink:0; text-align:right; margin-right:4px; }
-
+        
         @media screen and (max-width: 600px) {
-          #ps-m {
-            top: auto !important;
-            bottom: 0 !important;
-            right: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 82vh !important;
-            height: 82dvh !important;
-            max-height: calc(100dvh - 20px) !important;
-            border-radius: 16px 16px 0 0;
-            border-bottom: none;
-            padding: 14px 10px calc(24px + env(safe-area-inset-bottom, 16px)) 10px !important;
-          }
+          #ps-m { top:auto !important; bottom:0 !important; right:0 !important; left:0 !important; width:100% !important; height:82dvh !important; max-height:calc(100dvh - 20px) !important; border-radius:16px 16px 0 0; border-bottom:none; padding: 14px 10px calc(24px + env(safe-area-inset-bottom, 16px)) 10px !important; }
           #ps-resize-handle { display: none !important; }
           .ps-row { padding: 10px !important; margin-bottom: 4px; background: #181924; border: 1px solid #282b3d; border-radius: 6px; gap: 10px !important; }
           .ps-row.selected { background: #1f273d !important; border-color: #3d59a1 !important; }
-          .ps-k { transform: scale(1.4) !important; margin-right: 4px !important; margin-left: 2px !important; }
+          .ps-k { transform: scale(1.4) !important; margin: 0 4px 0 2px !important; }
           .ps-star-btn { font-size: 18px !important; padding: 4px 8px !important; }
           .ps-name-label { font-size: 13px !important; font-weight: 500; }
           .ps-btn { padding: 6px 10px; font-size: 12px; }
           .ps-input { font-size: 13px; padding: 7px; }
+          .ps-segment { height: 32px; }
+          .ps-segment label, .ps-segment button { font-size: 11px; }
           #ps-run { padding: 14px !important; font-size: 15px !important; border-radius: 8px; font-weight: bold; min-height: 48px; flex-shrink: 0 !important; margin-top: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
           #ps-fab { bottom: 16px; right: 16px; width: 54px; height: 54px; font-size: 26px; }
           .ps-chip { padding: 4px 10px; font-size: 11px; }
         }
       `;
-      document.head.appendChild(style);
+      document.head.appendChild(s);
     }
 
     buildHTML() {
-      const brandOptions = CONFIG.SHEETS.map(k => `<option value="${k}">${k}</option>`).join("");
-      const customId = localStorage.getItem(CONFIG.CUSTOM_ID_KEY) || "";
-
-      const fab = document.createElement("div");
-      fab.id = "ps-fab"; fab.style.display = "none"; fab.innerHTML = "✨"; fab.title = "アシストを開く";
-      document.body.appendChild(fab);
-
-      const m = document.createElement("div");
-      m.id = "ps-m";
-      m.innerHTML = `
-        <div id="ps-resize-handle" title="ドラッグしてサイズ変更"></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #2f3549;flex-shrink:0;">
-          <b style="font-size:13px;color:#7aa2f7;">PRO-361/56 入力アシスト v${CURRENT_VERSION}</b>
-          <div style="display:flex;gap:4px;align-items:center;">
-            <button id="ps-toggle-opt" class="ps-btn" style="padding:2px 7px;font-size:12px;" title="設定を開く">⚙設定</button>
-            <button id="ps-minimize" class="ps-btn" style="padding:2px 8px;font-size:12px;" title="最小化して隠す">ー</button>
-          </div>
-        </div>
-        <div id="ps-body" style="display:flex;flex-direction:column;gap:6px;flex:1;overflow:hidden;">
-          
-          <div id="ps-opt-panel" style="display:none;background:#1f2335;border:1px solid #3b4261;border-radius:6px;padding:8px;flex-direction:column;flex-shrink:0;">
-            <div class="ps-opt-group">
-              <span class="ps-opt-lbl">ペン:</span>
-              <div class="ps-radio-group" style="width:120px;">
-                <label><input type="radio" name="ps-pen-mode" value="361" ${this.store.penMode==="361"?"checked":""}><span>361色</span></label>
-                <label><input type="radio" name="ps-pen-mode" value="56" ${this.store.penMode==="56"?"checked":""}><span>56色</span></label>
-              </div>
-            </div>
-            <div class="ps-opt-group">
-              <span class="ps-opt-lbl">表示:</span>
-              <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;"><input type="checkbox" id="ps-toggle-brand" checked style="accent-color:#7aa2f7;">ブランド</label>
-                <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;"><input type="checkbox" id="ps-toggle-staff" checked style="accent-color:#9ece6a;">事務員</label>
-                <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;"><input type="checkbox" id="ps-toggle-unitcolor" checked style="accent-color:#ff9e64;">ユニット色</label>
-                <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;"><input type="checkbox" id="ps-toggle-variant" style="accent-color:#e0af68;">特殊色</label>
-              </div>
-            </div>
-            <div class="ps-opt-group" style="border-bottom:none;">
-              <span class="ps-opt-lbl">動作:</span>
-              <div style="display:flex;flex-direction:column;gap:4px;">
-                <div style="display:flex;gap:4px;">
-                  <button id="ps-sort-select" class="ps-btn ps-btn-primary" style="padding:2px 8px;font-size:10px;">選択順</button>
-                  <button id="ps-sort-code" class="ps-btn" style="padding:2px 8px;font-size:10px;">公式色順</button>
-                </div>
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;" title="同じカラーのアイドルを『連名』にして1つにまとめます"><input type="checkbox" id="ps-toggle-merge" ${this.store.mergeDuplicates ? "checked" : ""} style="accent-color:#f7768e;">重複カラーを1つにまとめる(連名登録)</label>
-              </div>
-            </div>
-            <div style="margin-top:2px;">
-              <div id="ps-opt-adv-toggle" style="cursor:pointer;font-size:10px;color:#565f89;text-align:center;padding:4px;background:#1a1b26;border-radius:4px;user-select:none;">▾ 詳細設定を開く (スプシID等)</div>
-              <div id="ps-opt-adv-panel" style="display:none;flex-direction:column;gap:4px;margin-top:6px;padding-top:6px;border-top:1px dashed #2f3549;">
-                <span style="font-size:10px;color:#9aa5ce;">カスタムスプレッドシートID:</span>
-                <div style="display:flex;gap:4px;width:100%;">
-                  <input type="text" id="ps-sheet-id" class="ps-input" style="flex:1;padding:3px 6px;font-size:10px;" placeholder="空欄でデフォルトを使用" value="${Utils.escapeHtml(customId)}">
-                  <button id="ps-sheet-save" class="ps-btn ps-btn-primary" style="padding:2px 8px;font-size:10px;">適用</button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div style="background:#13141c;border:1px solid #2f3549;border-radius:6px;padding:5px 8px;flex-shrink:0;">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span id="ps-queue-toggle" style="font-size:11px;color:#7dcfff;cursor:pointer;user-select:none;">追加予定: <b id="ps-queue-count">0</b>名 <span id="ps-queue-arrow" style="font-size:9px;color:#9aa5ce;">▾</span></span>
-              <div style="display:flex;gap:4px;">
-                <button id="ps-extract" class="ps-btn" style="padding:2px 6px;font-size:9px;background:#3d59a1;color:#fff;" title="画像やサイトのテキストから自動抽出">📋抽出</button>
-                <button id="ps-import" class="ps-btn" style="padding:2px 6px;font-size:9px;">読込</button>
-                <button id="ps-export" class="ps-btn" style="padding:2px 6px;font-size:9px;">保存</button>
-                <button id="ps-clear-queue" style="background:none;border:none;color:#f7768e;cursor:pointer;font-size:10px;margin-left:4px;">全クリア</button>
-              </div>
-            </div>
-            <div id="ps-queue-list" style="display:none;flex-wrap:wrap;gap:4px;max-height:140px;overflow-y:auto;margin-top:5px;padding-top:5px;border-top:1px dashed #2f3549;"></div>
-          </div>
-          <div style="display:flex;gap:4px;flex-shrink:0;">
-            <select id="ps-b" class="ps-input" style="flex:1;">${brandOptions}</select>
-            <input type="text" id="ps-search" class="ps-input" placeholder="名前検索(Escでクリア)..." style="width:130px;">
-            <button id="ps-reload" class="ps-btn" title="再取得・キャッシュクリア" style="padding:4px 8px;">↻</button>
-          </div>
-          <div id="ps-unit-chips" style="display:none;flex-wrap:nowrap;overflow-x:auto;gap:4px;padding:2px 0;flex-shrink:0;"></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:0 2px;flex-shrink:0;">
-            <span style="font-size:10px;color:#565f89;">選択操作:</span>
+      const opts = CONFIG.SHEETS.map(k => `<option value="${k}">${k}</option>`).join("");
+      const customId = localStorage.getItem(CONFIG.KEYS.ID) || "";
+      document.body.insertAdjacentHTML("beforeend", `<div id="ps-fab" style="display:none;" title="アシストを開く">✨</div>
+        <div id="ps-m">
+          <div id="ps-resize-handle" title="ドラッグしてサイズ変更"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #2f3549;flex-shrink:0;">
+            <b style="font-size:13px;color:#7aa2f7;">PRO-361/56 入力アシスト v${CURRENT_VERSION}</b>
             <div style="display:flex;gap:4px;">
-              <button id="ps-sa" class="ps-btn" style="padding:2px 8px;font-size:10px;">全選択</button>
-              <button id="ps-ca" class="ps-btn" style="padding:2px 8px;font-size:10px;">全解除</button>
+              <button id="ps-toggle-opt" class="ps-btn" style="padding:2px 7px;">⚙設定</button>
+              <button id="ps-minimize" class="ps-btn" style="padding:2px 8px;">ー</button>
             </div>
           </div>
-          
-          <div id="ps-l" style="flex:1;overflow-y:auto;background:#13141c;padding:4px;border-radius:4px;min-height:75px;">読込中...</div>
-          
-          <button id="ps-run" class="ps-btn ps-btn-primary" style="width:100%;">リストに追加する</button>
+          <div id="ps-body" style="display:flex;flex-direction:column;gap:6px;flex:1;overflow:hidden;">
+            
+            <div id="ps-opt-panel" style="display:none;background:#1f2335;border:1px solid #3b4261;border-radius:6px;padding:10px;flex-direction:column;flex-shrink:0;">
+              
+              <div class="ps-opt-group">
+                <span class="ps-opt-lbl">カラー:</span>
+                <div class="ps-segment" style="width:140px;">
+                  <label><input type="radio" name="ps-pen-mode" value="361" ${this.store.penMode==="361"?"checked":""}><span>361色</span></label>
+                  <label><input type="radio" name="ps-pen-mode" value="56" ${this.store.penMode==="56"?"checked":""}><span>56色</span></label>
+                </div>
+              </div>
+              
+              <div class="ps-opt-group">
+                <span class="ps-opt-lbl">並び:</span>
+                <div class="ps-segment" style="flex:1;">
+                  <button id="ps-sort-select" class="${this.store.sortMode==="select"?"active":""}">選択順</button>
+                  <button id="ps-sort-code" class="${this.store.sortMode==="code"?"active":""}">公式順</button>
+                  <button id="ps-sort-preset" class="${this.store.sortMode==="preset"?"active":""}" title="スプシのI列で指定した順">カスタム</button>
+                </div>
+              </div>
+              
+              <div class="ps-opt-group">
+                <span class="ps-opt-lbl">表示:</span>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:24px;">
+                  ${[['brand','ブランド','#7aa2f7'],['staff','事務員','#9ece6a'],['unitcolor','ユニット','#ff9e64'],['variant','特殊色','#e0af68',true]].map(([id,lbl,col,uncheck]) => `<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:#a9b1d6;"><input type="checkbox" id="ps-toggle-${id}" ${uncheck?"":"checked"} style="accent-color:${col};">${lbl}</label>`).join("")}
+                </div>
+              </div>
+              
+              <div class="ps-opt-group" style="border-bottom:none;">
+                <span class="ps-opt-lbl">動作:</span>
+                <div style="display:flex;align-items:center;min-height:24px;flex:1;">
+                  <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#a9b1d6;" title="同じカラーを連名にして1つにまとめます">
+                    <input type="checkbox" id="ps-toggle-merge" ${this.store.mergeDuplicates ? "checked" : ""} style="accent-color:#f7768e;">
+                    重複カラーを1つにまとめる(連名登録)
+                  </label>
+                </div>
+              </div>
+
+              <div style="margin-top:2px;">
+                <div id="ps-opt-adv-toggle" style="cursor:pointer;font-size:10px;color:#565f89;text-align:center;padding:4px;background:#1a1b26;border-radius:4px;">▾ 詳細設定を開く (スプシID等)</div>
+                <div id="ps-opt-adv-panel" style="display:none;flex-direction:column;gap:4px;margin-top:6px;padding-top:6px;border-top:1px dashed #2f3549;">
+                  <span style="font-size:10px;color:#9aa5ce;">カスタムスプレッドシートID:</span>
+                  <div style="display:flex;gap:4px;"><input type="text" id="ps-sheet-id" class="ps-input" style="flex:1;" placeholder="空欄でデフォルト" value="${Utils.escapeHtml(customId)}"><button id="ps-sheet-save" class="ps-btn ps-btn-primary">適用</button></div>
+                </div>
+              </div>
+            </div>
+
+            <div style="background:#13141c;border:1px solid #2f3549;border-radius:6px;padding:5px 8px;flex-shrink:0;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span id="ps-queue-toggle" style="font-size:11px;color:#7dcfff;cursor:pointer;">追加予定: <b id="ps-queue-count">0</b>名 <span id="ps-queue-arrow">▾</span></span>
+                <div style="display:flex;gap:4px;">
+                  <button id="ps-extract" class="ps-btn" style="background:#3d59a1;color:#fff;">📋抽出</button>
+                  <button id="ps-import" class="ps-btn">読込</button>
+                  <button id="ps-export" class="ps-btn">保存</button>
+                  <button id="ps-clear-queue" style="background:none;border:none;color:#f7768e;cursor:pointer;font-size:10px;margin-left:4px;">全クリア</button>
+                </div>
+              </div>
+              <div id="ps-queue-list" style="display:none;flex-wrap:wrap;gap:4px;max-height:140px;overflow-y:auto;margin-top:5px;padding-top:5px;border-top:1px dashed #2f3549;"></div>
+            </div>
+            <div style="display:flex;gap:4px;flex-shrink:0;">
+              <select id="ps-b" class="ps-input" style="flex:1;">${opts}</select>
+              <input type="text" id="ps-search" class="ps-input" placeholder="名前検索(Escでクリア)..." style="width:130px;">
+              <button id="ps-reload" class="ps-btn" title="再取得・キャッシュクリア" style="padding:4px 8px;">↻</button>
+            </div>
+            <div id="ps-unit-chips" style="display:none;flex-wrap:nowrap;overflow-x:auto;gap:4px;padding:2px 0;flex-shrink:0;"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:0 2px;flex-shrink:0;">
+              <span style="font-size:10px;color:#565f89;">選択操作:</span>
+              <div style="display:flex;gap:4px;"><button id="ps-sa" class="ps-btn">全選択</button><button id="ps-ca" class="ps-btn">全解除</button></div>
+            </div>
+            <div id="ps-l" style="flex:1;overflow-y:auto;background:#13141c;padding:4px;border-radius:4px;min-height:75px;">読込中...</div>
+            <button id="ps-run" class="ps-btn ps-btn-primary" style="width:100%;">リストに追加する</button>
+          </div>
         </div>
-      `;
-      document.body.appendChild(m);
+      `);
     }
 
     cacheElements() {
-      const get = (id) => document.getElementById(id);
+      const get = id => document.getElementById(id);
       this.els = {
-        container: get("ps-m"), body: get("ps-body"), resizeHandle: get("ps-resize-handle"),
-        fab: get("ps-fab"), minimizeBtn: get("ps-minimize"),
-        brandSelect: get("ps-b"), memberList: get("ps-l"), searchInput: get("ps-search"),
-        runBtn: get("ps-run"), reloadBtn: get("ps-reload"),
-        queueList: get("ps-queue-list"), queueCount: get("ps-queue-count"), clearQueueBtn: get("ps-clear-queue"),
-        extractBtn: get("ps-extract"), importBtn: get("ps-import"), exportBtn: get("ps-export"),
-        toggles: { brand: get("ps-toggle-brand"), staff: get("ps-toggle-staff"), unitColor: get("ps-toggle-unitcolor"), variant: get("ps-toggle-variant") },
-        penModeRadios: document.querySelectorAll('input[name="ps-pen-mode"]'), mergeToggle: get("ps-toggle-merge"),
-        sortSelectBtn: get("ps-sort-select"), sortCodeBtn: get("ps-sort-code"),
-        optBtn: get("ps-toggle-opt"), optPanel: get("ps-opt-panel"), advToggleBtn: get("ps-opt-adv-toggle"), advPanel: get("ps-opt-adv-panel"),
-        sheetIdInput: get("ps-sheet-id"), sheetIdSave: get("ps-sheet-save"),
-        queueToggle: get("ps-queue-toggle"), queueArrow: get("ps-queue-arrow"), unitChips: get("ps-unit-chips"),
-        saBtn: get("ps-sa"), caBtn: get("ps-ca")
+        m: get("ps-m"), body: get("ps-body"), resize: get("ps-resize-handle"), fab: get("ps-fab"), min: get("ps-minimize"),
+        brand: get("ps-b"), list: get("ps-l"), search: get("ps-search"), run: get("ps-run"), reload: get("ps-reload"),
+        qList: get("ps-queue-list"), qCount: get("ps-queue-count"), clear: get("ps-clear-queue"),
+        ext: get("ps-extract"), imp: get("ps-import"), exp: get("ps-export"),
+        toggles: { brand: get("ps-toggle-brand"), staff: get("ps-toggle-staff"), uc: get("ps-toggle-unitcolor"), var: get("ps-toggle-variant") },
+        radios: document.querySelectorAll('input[name="ps-pen-mode"]'), merge: get("ps-toggle-merge"),
+        sort: { select: get("ps-sort-select"), code: get("ps-sort-code"), preset: get("ps-sort-preset") },
+        optBtn: get("ps-toggle-opt"), optPanel: get("ps-opt-panel"), advBtn: get("ps-opt-adv-toggle"), advPanel: get("ps-opt-adv-panel"),
+        sid: get("ps-sheet-id"), save: get("ps-sheet-save"), qTog: get("ps-queue-toggle"), qArr: get("ps-queue-arrow"), chips: get("ps-unit-chips"),
+        sa: get("ps-sa"), ca: get("ps-ca")
       };
     }
-    updateReloadTooltip() {
-      const cacheKey = `ps_cache_${this.store.currentBrand}`;
-      try {
-        const cached = JSON.parse(localStorage.getItem(cacheKey));
-        if (cached && cached.timestamp) {
-          const d = new Date(cached.timestamp), pad = (n) => String(n).padStart(2, '0');
-          this.els.reloadBtn.title = `再取得・キャッシュクリア (最終取得: ${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())})`;
-        } else { this.els.reloadBtn.title = `再取得・キャッシュクリア`; }
-      } catch (e) { this.els.reloadBtn.title = `再取得・キャッシュクリア`; }
-    }
+
     bindEvents() {
-      this.els.resizeHandle.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        const startX = e.clientX, startY = e.clientY, startW = this.els.container.offsetWidth, startH = this.els.container.offsetHeight;
-        const onMouseMove = (ev) => {
-          this.els.container.style.width = `${Math.max(280, Math.min(window.innerWidth * 0.9, startW + (startX - ev.clientX)))}px`;
-          this.els.container.style.height = `${Math.max(240, Math.min(window.innerHeight * 0.94, startH + (ev.clientY - startY)))}px`;
-        };
-        const onMouseUp = () => { window.removeEventListener("mousemove", onMouseMove); window.removeEventListener("mouseup", onMouseUp); };
-        window.addEventListener("mousemove", onMouseMove); window.addEventListener("mouseup", onMouseUp);
+      const e = this.els, s = this.store;
+      
+      e.resize.onmousedown = ev => {
+        ev.preventDefault();
+        const startX = ev.clientX, startY = ev.clientY, w = e.m.offsetWidth, h = e.m.offsetHeight;
+        const move = e2 => { e.m.style.width = `${Math.max(280, Math.min(window.innerWidth * 0.9, w + (startX - e2.clientX)))}px`; e.m.style.height = `${Math.max(240, Math.min(window.innerHeight * 0.94, h + (e2.clientY - startY)))}px`; };
+        const up = () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
+        window.addEventListener("mousemove", move); window.addEventListener("mouseup", up);
+      };
+      
+      e.min.onclick = () => { e.m.style.display = "none"; e.fab.style.display = "flex"; };
+      e.fab.onclick = () => { e.fab.style.display = "none"; e.m.style.display = "flex"; e.m.style.height = this.savedHeight || "750px"; };
+      
+      e.optBtn.onclick = () => { const show = e.optPanel.style.display === "flex"; e.optPanel.style.display = show ? "none" : "flex"; e.optBtn.style.color = show ? "#a9b1d6" : "#7aa2f7"; };
+      e.advBtn.onclick = () => { const show = e.advPanel.style.display === "flex"; e.advPanel.style.display = show ? "none" : "flex"; e.advBtn.textContent = show ? "▾ 詳細設定を開く (スプシID等)" : "▴ 詳細設定を閉じる"; };
+      e.qTog.onclick = () => { this.isQueueOpen = !this.isQueueOpen; e.qList.style.display = this.isQueueOpen ? "flex" : "none"; e.qArr.textContent = this.isQueueOpen ? "▴" : "▾"; };
+      
+      Object.entries(e.sort).forEach(([mode, btn]) => {
+        btn.onclick = () => { s.setPref("sortMode", mode, "SORT"); Object.values(e.sort).forEach(b => b.classList.remove("active")); btn.classList.add("active"); this.renderQueue(); };
       });
-      this.els.minimizeBtn.onclick = () => { this.els.container.style.display = "none"; this.els.fab.style.display = "flex"; };
-      this.els.fab.onclick = () => { this.els.fab.style.display = "none"; this.els.container.style.display = "flex"; this.els.container.style.height = this.savedHeight || "750px"; };
-      this.els.optBtn.onclick = () => {
-        const isShow = this.els.optPanel.style.display === "flex";
-        this.els.optPanel.style.display = isShow ? "none" : "flex";
-        this.els.optBtn.style.color = isShow ? "#a9b1d6" : "#7aa2f7";
+      
+      e.toggles.brand.onchange = ev => { s.showBrand = ev.target.checked; this.renderList(); };
+      e.toggles.staff.onchange = ev => { s.showStaff = ev.target.checked; this.renderList(); };
+      e.toggles.uc.onchange = ev => { s.showUnitColor = ev.target.checked; this.renderList(); };
+      e.toggles.var.onchange = ev => { s.showVariant = ev.target.checked; this.renderQueue(); this.renderList(); };
+      e.merge.onchange = ev => s.setPref("mergeDuplicates", ev.target.checked, "DUP");
+      e.radios.forEach(r => r.onchange = ev => { if (ev.target.checked) { s.setPref("penMode", ev.target.value, "PEN"); this.renderQueue(); this.renderList(); } });
+      
+      e.save.onclick = () => {
+        const val = e.sid.value.trim();
+        val ? localStorage.setItem(CONFIG.KEYS.ID, val) : localStorage.removeItem(CONFIG.KEYS.ID);
+        alert(val ? "カスタムIDを適用しました。\nデータを再取得します。" : "デフォルトに戻しました。\nデータを再取得します。");
+        CONFIG.SHEETS.forEach(sheet => localStorage.removeItem(`ps_cache_${sheet}`));
+        s.cache = {}; this.app.loadData(true);
       };
-      this.els.advToggleBtn.onclick = () => {
-        const isShow = this.els.advPanel.style.display === "flex";
-        this.els.advPanel.style.display = isShow ? "none" : "flex";
-        this.els.advToggleBtn.textContent = isShow ? "▾ 詳細設定を開く (スプシID等)" : "▴ 詳細設定を閉じる";
-      };
-      this.els.queueToggle.onclick = () => {
-        this.isQueueOpen = !this.isQueueOpen;
-        this.els.queueList.style.display = this.isQueueOpen ? "flex" : "none";
-        this.els.queueArrow.textContent = this.isQueueOpen ? "▴" : "▾";
-      };
-      this.els.sortSelectBtn.onclick = () => { this.store.sortMode = "select"; this.updateSortUI(); this.renderQueue(); };
-      this.els.sortCodeBtn.onclick = () => { this.store.sortMode = "code"; this.updateSortUI(); this.renderQueue(); };
-      this.els.toggles.brand.onchange = (e) => { this.store.showBrand = e.target.checked; this.renderList(); };
-      this.els.toggles.staff.onchange = (e) => { this.store.showStaff = e.target.checked; this.renderList(); };
-      this.els.toggles.unitColor.onchange = (e) => { this.store.showUnitColor = e.target.checked; this.renderList(); };
-      this.els.toggles.variant.onchange = (e) => { this.store.showVariant = e.target.checked; this.renderQueue(); this.renderList(); };
-      this.els.mergeToggle.onchange = (e) => { this.store.toggleMergeDuplicates(e.target.checked); };
-      this.els.penModeRadios.forEach(radio => { radio.addEventListener('change', (e) => { if(e.target.checked) { this.store.setPenMode(e.target.value); this.renderQueue(); this.renderList(); } }); });
-      this.els.sheetIdSave.onclick = () => {
-        const newId = this.els.sheetIdInput.value.trim();
-        if (newId) { localStorage.setItem(CONFIG.CUSTOM_ID_KEY, newId); alert("カスタムIDを適用しました。\nデータを再取得します。"); }
-        else { localStorage.removeItem(CONFIG.CUSTOM_ID_KEY); alert("デフォルトに戻しました。\nデータを再取得します。"); }
-        CONFIG.SHEETS.forEach(s => localStorage.removeItem(`ps_cache_${s}`));
-        this.store.cache = {}; this.app.loadData(true);
-      };
-      this.els.searchInput.oninput = (e) => { this.store.searchQuery = e.target.value.trim().toLowerCase(); this.renderList(); };
-      this.els.searchInput.onkeydown = (e) => { if (e.key === "Escape") { this.els.searchInput.value = ""; this.store.searchQuery = ""; this.renderList(); } };
-      this.els.brandSelect.onchange = () => { this.els.searchInput.value = ""; this.store.searchQuery = ""; this.store.selectedUnit = ""; this.store.currentBrand = this.els.brandSelect.value; this.app.loadData(false); };
-      this.els.reloadBtn.onclick = () => { CONFIG.SHEETS.forEach(s => localStorage.removeItem(`ps_cache_${s}`)); this.store.cache = {}; this.app.loadData(true); };
-      this.els.saBtn.onclick = () => { this.store.getVisibleList().forEach(it => { const key = `${it.brand}:${it.n}`; if (!this.store.selected.has(key)) this.store.selected.set(key, { ...it, selectOrder: ++this.store.counter }); }); this.renderQueue(); this.renderList(); };
-      this.els.caBtn.onclick = () => { (this.store.cache[this.store.currentBrand] || []).forEach(it => this.store.selected.delete(`${it.brand}:${it.n}`)); this.renderQueue(); this.renderList(); };
+      
+      e.search.oninput = ev => { s.searchQuery = ev.target.value.trim().toLowerCase(); this.renderList(); };
+      e.search.onkeydown = ev => { if (ev.key === "Escape") { e.search.value = s.searchQuery = ""; this.renderList(); } };
+      e.brand.onchange = () => { e.search.value = s.searchQuery = s.selectedUnit = ""; s.currentBrand = e.brand.value; this.app.loadData(false); };
+      
+      e.reload.onclick = () => { CONFIG.SHEETS.forEach(sheet => localStorage.removeItem(`ps_cache_${sheet}`)); s.cache = {}; this.app.loadData(true); };
+      e.sa.onclick = () => { s.getVisibleList().forEach(it => { const key = `${it.brand}:${it.n}`; if (!s.selected.has(key)) s.selected.set(key, { ...it, selectOrder: ++s.counter }); }); this.renderQueue(); this.renderList(); };
+      e.ca.onclick = () => { (s.cache[s.currentBrand] || []).forEach(it => s.selected.delete(`${it.brand}:${it.n}`)); this.renderQueue(); this.renderList(); };
+      e.clear.onclick = () => { s.clearSelection(); this.renderQueue(); this.renderList(); };
 
-      this.els.memberList.onclick = (e) => {
-        const favBtn = e.target.closest(".ps-star-btn");
-        if (favBtn) {
-          e.preventDefault(); e.stopPropagation();
-          this.store.toggleFavorite(favBtn.getAttribute("data-fav"));
-          this.renderList(); return;
-        }
-        if (e.target.classList.contains("ps-k")) return;
-        const row = e.target.closest(".ps-row");
-        if (row) {
-          const chk = row.querySelector(".ps-k");
-          if (chk && !chk.disabled) {
-            chk.checked = !chk.checked;
-            chk.dispatchEvent(new Event("change", { bubbles: true }));
-          }
+      e.list.onclick = ev => {
+        const fav = ev.target.closest(".ps-star-btn");
+        if (fav) { ev.preventDefault(); ev.stopPropagation(); s.toggleFavorite(fav.getAttribute("data-fav")); this.renderList(); return; }
+        if (ev.target.classList.contains("ps-k")) return;
+        const row = ev.target.closest(".ps-row");
+        if (row) { const chk = row.querySelector(".ps-k"); if (chk && !chk.disabled) { chk.checked = !chk.checked; chk.dispatchEvent(new Event("change", { bubbles: true })); } }
+      };
+
+      e.list.onchange = ev => {
+        if (ev.target.classList.contains("ps-k")) {
+          const key = ev.target.getAttribute("data-key"), it = (s.cache[s.currentBrand] || []).find(i => `${i.brand}:${i.n}` === key);
+          if (it) { ev.target.checked ? s.selected.set(key, { ...it, selectOrder: ++s.counter }) : s.selected.delete(key); }
+          this.renderQueue(); ev.target.closest(".ps-row")?.classList.toggle("selected", ev.target.checked);
         }
       };
 
-      this.els.memberList.onchange = (e) => {
-        if (e.target.classList.contains("ps-k")) {
-          const key = e.target.getAttribute("data-key"), item = (this.store.cache[this.store.currentBrand] || []).find(it => `${it.brand}:${it.n}` === key);
-          if (item) { if (e.target.checked) this.store.selected.set(key, { ...item, selectOrder: ++this.store.counter }); else this.store.selected.delete(key); }
-          this.renderQueue();
-          const row = e.target.closest(".ps-row"); if (row) row.classList.toggle("selected", e.target.checked);
-        }
-      };
-      let draggedKey = null;
-      this.els.queueList.addEventListener("dragstart", (e) => { if (this.store.sortMode !== "select") return; const item = e.target.closest(".ps-drag-item"); if (!item) return; draggedKey = item.getAttribute("data-key"); e.dataTransfer.effectAllowed = "move"; setTimeout(() => item.classList.add("dragging"), 0); });
-      this.els.queueList.addEventListener("dragover", (e) => { if (this.store.sortMode !== "select" || !draggedKey) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; const item = e.target.closest(".ps-drag-item"); if (item && item.getAttribute("data-key") !== draggedKey) item.classList.add("drag-over"); });
-      this.els.queueList.addEventListener("dragleave", (e) => { const item = e.target.closest(".ps-drag-item"); if (item) item.classList.remove("drag-over"); });
-      this.els.queueList.addEventListener("drop", (e) => { if (this.store.sortMode !== "select" || !draggedKey) return; e.preventDefault(); const item = e.target.closest(".ps-drag-item"); if (item) { item.classList.remove("drag-over"); const dropTargetKey = item.getAttribute("data-key"); if (draggedKey !== dropTargetKey) { this.store.reorderSelection(draggedKey, dropTargetKey); this.renderQueue(); } } });
-      this.els.queueList.addEventListener("dragend", (e) => { const item = e.target.closest(".ps-drag-item"); if (item) item.classList.remove("dragging"); draggedKey = null; this.els.queueList.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over")); });
-      this.els.queueList.onclick = (e) => { const delKey = e.target.closest("button")?.getAttribute("data-del"); if (delKey) { this.store.selected.delete(delKey); this.renderQueue(); this.renderList(); } };
-      this.els.clearQueueBtn.onclick = () => { this.store.clearSelection(); this.renderQueue(); this.renderList(); };
-      this.els.extractBtn.onclick = async () => {
-        const text = prompt("【自動抽出機能】\n公式サイトのテキストや画像からコピーしたテキストを貼り付けてください。");
-        if (!text) return; const cleanText = text.replace(/\s+/g, '').toLowerCase(); if (!cleanText) return;
-        let addedCount = 0; const originalText = this.els.extractBtn.textContent; this.els.extractBtn.textContent = "⏳抽出中..."; this.els.extractBtn.disabled = true;
+      let dragKey = null;
+      e.qList.addEventListener("dragstart", ev => { if (s.sortMode !== "select") return; const it = ev.target.closest(".ps-drag-item"); if (it) { dragKey = it.getAttribute("data-key"); ev.dataTransfer.effectAllowed = "move"; setTimeout(() => it.classList.add("dragging"), 0); } });
+      e.qList.addEventListener("dragover", ev => { if (s.sortMode === "select" && dragKey) { ev.preventDefault(); ev.dataTransfer.dropEffect = "move"; const it = ev.target.closest(".ps-drag-item"); if (it && it.getAttribute("data-key") !== dragKey) it.classList.add("drag-over"); } });
+      e.qList.addEventListener("dragleave", ev => ev.target.closest(".ps-drag-item")?.classList.remove("drag-over"));
+      e.qList.addEventListener("drop", ev => { if (s.sortMode === "select" && dragKey) { ev.preventDefault(); const it = ev.target.closest(".ps-drag-item"); if (it) { it.classList.remove("drag-over"); const tKey = it.getAttribute("data-key"); if (dragKey !== tKey) { s.reorderSelection(dragKey, tKey); this.renderQueue(); } } } });
+      e.qList.addEventListener("dragend", ev => { ev.target.closest(".ps-drag-item")?.classList.remove("dragging"); dragKey = null; e.qList.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over")); });
+      e.qList.onclick = ev => { const delKey = ev.target.closest("button")?.getAttribute("data-del"); if (delKey) { s.selected.delete(delKey); this.renderQueue(); this.renderList(); } };
+
+      e.ext.onclick = async () => {
+        const text = prompt("【自動抽出機能】\n公式サイト等のテキストを貼り付けてください。")?.replace(/\s+/g, '').toLowerCase();
+        if (!text) return;
+        const orig = e.ext.textContent; e.ext.textContent = "⏳抽出中..."; e.ext.disabled = true; let added = 0;
         try {
-          const fetchPromises = CONFIG.SHEETS.map(async (sheet) => { if (!this.store.cache[sheet]) this.store.cache[sheet] = await DataFetcher.fetch(sheet, false); });
-          await Promise.all(fetchPromises);
-          CONFIG.SHEETS.forEach(sheet => {
-            (this.store.cache[sheet] || []).forEach(it => {
-              if (it.role !== "idol") return; const cleanName = it.n.replace(/\s+/g, '').toLowerCase(); if (cleanName.length <= 1) return;
-              if (cleanText.includes(cleanName)) { const key = `${it.brand}:${it.n}`; if (!this.store.selected.has(key)) { this.store.selected.set(key, { ...it, selectOrder: ++this.store.counter }); addedCount++; } }
-            });
-          });
+          await Promise.all(CONFIG.SHEETS.map(async sheet => { if (!s.cache[sheet]) s.cache[sheet] = await DataFetcher.fetch(sheet, false); }));
+          CONFIG.SHEETS.forEach(sheet => (s.cache[sheet] || []).forEach(it => {
+            const cleanName = it.n.replace(/\s+/g, '').toLowerCase();
+            if (it.role === "idol" && cleanName.length > 1 && text.includes(cleanName)) {
+              const key = `${it.brand}:${it.n}`; if (!s.selected.has(key)) { s.selected.set(key, { ...it, selectOrder: ++s.counter }); added++; }
+            }
+          }));
           this.renderQueue(); this.renderList();
-          if (addedCount > 0) alert(`🎉 抽出完了！\n合計 ${addedCount} 名をリストに追加しました。`); else alert("一致するアイドルが見つかりませんでした。");
-        } catch (e) { alert("抽出処理中にエラーが発生しました。"); } finally { this.els.extractBtn.textContent = originalText; this.els.extractBtn.disabled = false; }
+          alert(added > 0 ? `🎉 抽出完了！\n合計 ${added} 名を追加しました。` : "一致するアイドルが見つかりませんでした。");
+        } catch (err) { alert("抽出処理中にエラーが発生しました。"); } finally { e.ext.textContent = orig; e.ext.disabled = false; }
       };
-      this.els.exportBtn.onclick = () => {
-        const data = this.store.getSortedSelectedList(this.site.getRankCalculator());
-        if (data.length === 0) { alert("エクスポートするリストがありません。"); return; }
-        const exportPayload = { showVariant: this.store.showVariant, penMode: this.store.penMode, items: data };
-        const str = btoa(encodeURIComponent(JSON.stringify(exportPayload)));
-        navigator.clipboard.writeText(str).then(() => alert("リストのコードをコピーしました（特殊色や361/56モードも保存されました）！")).catch(() => alert("コピーに失敗しました。"));
+
+      e.exp.onclick = () => {
+        const data = s.getSortedSelectedList(this.site.getRankCalculator());
+        if (!data.length) return alert("エクスポートするリストがありません。");
+        navigator.clipboard.writeText(btoa(encodeURIComponent(JSON.stringify({ showVariant: s.showVariant, penMode: s.penMode, items: data }))))
+          .then(() => alert("リストのコードをコピーしました！")).catch(() => alert("コピーに失敗しました。"));
       };
-      this.els.importBtn.onclick = () => {
-        const str = prompt("【リスト読込】\n保存したリストのコードを貼り付けてください:"); if (!str) return;
+
+      e.imp.onclick = () => {
+        const str = prompt("【リスト読込】\nコードを貼り付けてください:"); if (!str) return;
         try {
-          const decoded = JSON.parse(decodeURIComponent(atob(str))); let itemsArray = []; let targetShowVariant = false; let targetPenMode = this.store.penMode;
-          if (Array.isArray(decoded)) { itemsArray = decoded; } else if (decoded && Array.isArray(decoded.items)) { itemsArray = decoded.items; targetShowVariant = !!decoded.showVariant; if (decoded.penMode) targetPenMode = decoded.penMode; }
-          if (itemsArray.length > 0) {
-            this.store.showVariant = targetShowVariant; this.els.toggles.variant.checked = targetShowVariant;
-            this.store.setPenMode(targetPenMode); this.els.penModeRadios.forEach(r => r.checked = (r.value === targetPenMode));
-            this.store.clearSelection(); let added = 0;
-            itemsArray.forEach(it => { if (!it || typeof it.n !== 'string' || typeof it.brand !== 'string') return; this.store.counter = Math.max(this.store.counter, it.selectOrder || 0); this.store.selected.set(`${it.brand}:${it.n}`, it); added++; });
-            if (added > 0) { this.renderQueue(); this.renderList(); alert(`リストを読み込みました！`); } else { alert("有効なアイドルデータが見つかりませんでした。"); }
-          }
-        } catch (e) { alert("無効なコードです。"); }
+          const dec = JSON.parse(decodeURIComponent(atob(str)));
+          const items = Array.isArray(dec) ? dec : (dec?.items || []);
+          if (items.length) {
+            if (!Array.isArray(dec)) { s.showVariant = !!dec.showVariant; e.toggles.var.checked = s.showVariant; s.setPref("penMode", dec.penMode || "361", "PEN"); e.radios.forEach(r => r.checked = r.value === s.penMode); }
+            s.clearSelection();
+            items.forEach(it => { if (it?.n && it?.brand) { s.counter = Math.max(s.counter, it.selectOrder || 0); s.selected.set(`${it.brand}:${it.n}`, it); } });
+            this.renderQueue(); this.renderList(); alert("リストを読み込みました！");
+          } else alert("有効なデータが見つかりません。");
+        } catch (err) { alert("無効なコードです。"); }
       };
-      this.els.runBtn.onclick = () => this.app.executeAutoAdd();
+
+      e.run.onclick = () => this.app.executeAutoAdd();
     }
-    updateSortUI() { this.els.sortSelectBtn.className = `ps-btn ${this.store.sortMode === "select" ? "ps-btn-primary" : ""}`; this.els.sortCodeBtn.className = `ps-btn ${this.store.sortMode === "code" ? "ps-btn-primary" : ""}`; }
+
     renderQueue() {
-      this.els.queueCount.textContent = this.store.selected.size;
-      if (this.store.selected.size === 0) { this.els.queueList.innerHTML = `<span style="color:#565f89;font-size:10px;">未選択</span>`; return; }
-      const isManualSort = this.store.sortMode === "select";
-      this.els.queueList.innerHTML = this.store.getSortedSelectedList(this.site.getRankCalculator()).map(it => {
-        const activeColor = this.store.getActiveColor(it), activePen = this.store.getActivePen(it), isSkip = (activePen === "--");
-        const escKey = Utils.escapeHtml(`${it.brand}:${it.n}`), escN = Utils.escapeHtml(it.n), escC = Utils.escapeHtml(activeColor || '#fff'), escP = Utils.escapeHtml(activePen);
-        return `<span class="ps-badge ps-drag-item" data-key="${escKey}" ${isManualSort ? 'draggable="true"' : ''} style="${isSkip ? 'opacity:0.6;' : ''}">${isManualSort ? `<span class="ps-drag-handle" title="ドラッグして移動">⠿</span>` : ''}<span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:${escC};"></span><span style="${isSkip ? 'text-decoration:line-through;' : ''}">${escN}</span><span style="color:${isSkip ? '#f7768e' : '#7dcfff'};font-size:9px;font-family:monospace;">(${escP})</span><button data-del="${escKey}" style="background:none;border:none;color:#f7768e;cursor:pointer;padding:0 2px;line-height:1;">✕</button></span>`;
+      const e = this.els, s = this.store;
+      e.qCount.textContent = s.selected.size;
+      if (!s.selected.size) { e.qList.innerHTML = `<span style="color:#565f89;font-size:10px;">未選択</span>`; return; }
+      const isSelect = s.sortMode === "select";
+      e.qList.innerHTML = s.getSortedSelectedList(this.site.getRankCalculator()).map(it => {
+        const aCol = Utils.escapeHtml(s.getActiveColor(it) || '#fff'), aPen = Utils.escapeHtml(s.getActivePen(it)), isSkip = aPen === "--";
+        const key = Utils.escapeHtml(`${it.brand}:${it.n}`), n = Utils.escapeHtml(it.n);
+        return `<span class="ps-badge ps-drag-item" data-key="${key}" ${isSelect ? 'draggable="true"' : ''} style="${isSkip ? 'opacity:0.6;' : ''}">${isSelect ? `<span class="ps-drag-handle" title="ドラッグして移動">⠿</span>` : ''}<span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:${aCol};"></span><span style="${isSkip ? 'text-decoration:line-through;' : ''}">${n}</span><span style="color:${isSkip ? '#f7768e' : '#7dcfff'};font-size:9px;font-family:monospace;">(${aPen})</span><button data-del="${key}" style="background:none;border:none;color:#f7768e;cursor:pointer;padding:0 2px;">✕</button></span>`;
       }).join("");
     }
+
     renderUnitChips() {
       const units = this.store.getUnits();
-      if (units.length === 0) { this.els.unitChips.style.display = "none"; this.els.unitChips.innerHTML = ""; this.store.selectedUnit = ""; return; }
-      this.els.unitChips.style.display = "flex";
-      this.els.unitChips.innerHTML = `<span class="ps-chip ${this.store.selectedUnit === '' ? 'active' : ''}" data-unit="">全て</span>${units.map(u => { const escU = Utils.escapeHtml(u); return `<span class="ps-chip ${this.store.selectedUnit === u ? 'active' : ''}" data-unit="${escU}">${escU}</span>`; }).join("")}`;
-      this.els.unitChips.querySelectorAll(".ps-chip").forEach(chip => { chip.onclick = () => { this.store.selectedUnit = chip.getAttribute("data-unit"); this.renderUnitChips(); this.renderList(); }; });
+      if (!units.length) { this.els.chips.style.display = "none"; this.els.chips.innerHTML = ""; this.store.selectedUnit = ""; return; }
+      this.els.chips.style.display = "flex";
+      this.els.chips.innerHTML = `<span class="ps-chip ${!this.store.selectedUnit ? 'active' : ''}" data-unit="">全て</span>` + units.map(u => {
+        const eU = Utils.escapeHtml(u); return `<span class="ps-chip ${this.store.selectedUnit === u ? 'active' : ''}" data-unit="${eU}">${eU}</span>`;
+      }).join("");
+      this.els.chips.querySelectorAll(".ps-chip").forEach(c => c.onclick = () => { this.store.selectedUnit = c.getAttribute("data-unit"); this.renderUnitChips(); this.renderList(); });
     }
+
     renderList() {
-      const list = this.store.getVisibleList();
-      if (!list.length) { this.els.memberList.innerHTML = `<span style="color:#f7768e;display:block;padding:6px 0;">一致する項目がありません</span>`; return; }
-      this.els.memberList.innerHTML = list.map(it => {
-        const activeColor = this.store.getActiveColor(it), activePen = this.store.getActivePen(it), isSkip = (activePen === "--");
-        const key = `${it.brand}:${it.n}`, escKey = Utils.escapeHtml(key), escN = Utils.escapeHtml(it.n), escC = Utils.escapeHtml(activeColor || '#fff'), escP = Utils.escapeHtml(activePen);
-        const isChecked = this.store.selected.has(key), isFav = this.store.favorites.has(key);
-        let tag = ""; if (it.role === "brand") tag = `<span class="ps-tag-brand">ブランド</span>`; else if (it.role === "staff") tag = `<span class="ps-tag-staff">事務員</span>`; else if (it.role === "unit_color") tag = `<span class="ps-tag-unit">ユニット</span>`;
-        const showUnitTag = it.unit && !CONFIG.EXCLUDE_ROLES.includes(it.unit) && it.role === "idol" && !it.n.includes(it.unit);
-        const unitTag = showUnitTag ? `<span style="font-size:9px;color:#565f89;margin-left:4px;">[${Utils.escapeHtml(it.unit)}]</span>` : "";
-        const starHtml = (it.role === "idol" || it.role === "unit_color") ? `<button type="button" class="ps-star-btn ${isFav ? 'active' : ''}" data-fav="${escKey}" title="推しピン留め">${isFav ? '★' : '☆'}</button>` : `<span style="width:28px;display:inline-block;flex-shrink:0;"></span>`;
-        return `<div class="ps-row ${isChecked ? 'selected' : ''}" data-rowkey="${escKey}" style="${isSkip ? 'opacity:0.6;' : ''}"><input type="checkbox" data-key="${escKey}" class="ps-k" ${isChecked ? "checked" : ""} style="cursor:pointer;flex-shrink:0;" ${isSkip ? 'disabled title="このモードではコードが未設定です"' : ''}>${starHtml}<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${escC};border:1px solid rgba(255,255,255,0.4);flex-shrink:0;"></span><span class="ps-name-label" data-key="${escKey}" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; ${isSkip ? 'text-decoration:line-through;opacity:0.6;' : ''}">${escN}${tag}${unitTag}</span><span style="color:${isSkip ? '#f7768e' : '#7dcfff'};font-family:monospace;font-weight:bold;font-size:12px;flex-shrink:0;margin-left:4px;" title="${isSkip ? 'コード未設定のためスキップされます' : ''}">${escP}</span></div>`;
+      const list = this.store.getVisibleList(), s = this.store;
+      if (!list.length) { this.els.list.innerHTML = `<span style="color:#f7768e;display:block;padding:6px 0;">一致する項目がありません</span>`; return; }
+      this.els.list.innerHTML = list.map(it => {
+        const aCol = Utils.escapeHtml(s.getActiveColor(it) || '#fff'), aPen = Utils.escapeHtml(s.getActivePen(it)), isSkip = aPen === "--";
+        const key = `${it.brand}:${it.n}`, escKey = Utils.escapeHtml(key), n = Utils.escapeHtml(it.n);
+        const isChk = s.selected.has(key), isFav = s.favorites.has(key);
+        const tag = it.role === "brand" ? `<span class="ps-tag ps-tag-brand">ブランド</span>` : it.role === "staff" ? `<span class="ps-tag ps-tag-staff">事務員</span>` : it.role === "unit_color" ? `<span class="ps-tag ps-tag-unit">ユニット</span>` : "";
+        const uTag = it.unit && !CONFIG.EXCLUDE_ROLES.includes(it.unit) && it.role === "idol" && !it.n.includes(it.unit) ? `<span style="font-size:9px;color:#565f89;margin-left:4px;">[${Utils.escapeHtml(it.unit)}]</span>` : "";
+        const star = ["idol", "unit_color"].includes(it.role) ? `<button type="button" class="ps-star-btn ${isFav ? 'active' : ''}" data-fav="${escKey}" title="推しピン留め">${isFav ? '★' : '☆'}</button>` : `<span style="width:28px;flex-shrink:0;"></span>`;
+        return `<div class="ps-row ${isChk ? 'selected' : ''}" data-rowkey="${escKey}" style="${isSkip ? 'opacity:0.6;' : ''}"><input type="checkbox" data-key="${escKey}" class="ps-k" ${isChk ? "checked" : ""} ${isSkip ? 'disabled title="未設定"' : ''}>${star}<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${aCol};border:1px solid rgba(255,255,255,0.4);flex-shrink:0;"></span><span class="ps-name-label" data-key="${escKey}" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; ${isSkip ? 'text-decoration:line-through;opacity:0.6;' : ''}">${n}${tag}${uTag}</span><span style="color:${isSkip ? '#f7768e' : '#7dcfff'};font-family:monospace;font-weight:bold;font-size:12px;flex-shrink:0;margin-left:4px;">${aPen}</span></div>`;
       }).join("");
     }
   }
@@ -656,67 +558,55 @@
     }
     async loadData(force = false) {
       if (!this.store.cache[this.store.currentBrand] || force) {
-        this.ui.els.memberList.innerHTML = `<span style="color:#aaa;">${force ? '再取得中...' : '読込中...'}</span>`;
+        this.ui.els.list.innerHTML = `<span style="color:#aaa;">${force ? '再取得中...' : '読込中...'}</span>`;
         this.store.cache[this.store.currentBrand] = await DataFetcher.fetch(this.store.currentBrand, force);
       }
-      this.ui.updateReloadTooltip(); this.ui.renderUnitChips(); this.ui.renderList();
+      this.ui.renderUnitChips(); this.ui.renderList();
     }
     async executeAutoAdd() {
       const targets = this.store.getSortedSelectedList(this.siteAdapter.getRankCalculator());
-      if (!targets.length) { alert("メンバーを選択してください"); return; }
-      this.ui.els.runBtn.disabled = true; this.siteAdapter.buildCache();
+      if (!targets.length) return alert("メンバーを選択してください");
+      this.ui.els.run.disabled = true; this.siteAdapter.buildCache();
 
-      let processTargets = [];
+      let pTargets = targets;
       if (this.store.mergeDuplicates) {
-        const map = new Map();
+        const map = new Map(); pTargets = [];
         targets.forEach(it => {
           const pen = this.store.getActivePen(it);
-          if (pen === "--") { processTargets.push({ ...it }); }
-          else if (map.has(pen)) { map.get(pen).n += " / " + it.n; }
-          else { map.set(pen, { ...it, n: it.n }); }
+          if (pen === "--") pTargets.push({ ...it });
+          else map.has(pen) ? map.get(pen).n += " / " + it.n : map.set(pen, { ...it, n: it.n });
         });
-        processTargets = [...processTargets, ...Array.from(map.values())];
-      } else { processTargets = targets; }
-
-      let count = 0; let skippedList = [];
-      for (let i = 0; i < processTargets.length; i++) {
-        const it = processTargets[i];
-        const shortName = it.n.length > 15 ? it.n.substring(0, 15) + "..." : it.n;
-        this.ui.els.runBtn.textContent = `[${i + 1}/${processTargets.length}] ${shortName}`;
-        
-        const activePen = this.store.getActivePen(it);
-        if (activePen === "--") { skippedList.push(`・${it.n} (コード未設定)`); continue; }
-
-        const targetBtn = this.siteAdapter.getButton(activePen);
-        if (targetBtn) {
-          targetBtn.scrollIntoView({ block: "nearest", inline: "nearest" });
-          const editBtnsBefore = this.siteAdapter.getEditButtons();
-          Utils.simulateClick(targetBtn);
-          await Utils.sleep(80);
-          const editBtnsAfter = this.siteAdapter.getEditButtons();
-          const newEditBtn = editBtnsAfter.find(el => !editBtnsBefore.includes(el)) || editBtnsAfter[editBtnsAfter.length - 1];
-          
-          if (newEditBtn) {
-            const inputsBefore = this.siteAdapter.getSiteInputs();
-            Utils.simulateClick(newEditBtn);
-            await Utils.sleep(50);
-            const inputsAfter = this.siteAdapter.getSiteInputs();
-            const targetInput = inputsAfter.find(el => !inputsBefore.includes(el)) || inputsAfter[inputsAfter.length - 1];
-            if (targetInput) {
-              Utils.setInputValue(targetInput, it.n);
-              targetInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-            }
-          }
-          count++; await Utils.sleep(60);
-        } else { skippedList.push(`・${it.n} (コード: ${activePen})`); }
+        pTargets.push(...map.values());
       }
 
-      this.ui.els.runBtn.disabled = false;
-      this.ui.els.runBtn.textContent = `完了 (${count}/${processTargets.length}件)`;
-      if (skippedList.length > 0) alert(`処理が完了しましたが、以下のメンバーはスキップされました（コード未設定または存在しないコード）：\n\n${skippedList.join('\n')}`);
-      setTimeout(() => { this.ui.els.runBtn.textContent = "リストに追加する"; }, 2000);
+      let count = 0, skipped = [];
+      for (let i = 0; i < pTargets.length; i++) {
+        const it = pTargets[i], activePen = this.store.getActivePen(it);
+        this.ui.els.run.textContent = `[${i + 1}/${pTargets.length}] ${it.n.substring(0, 15)}${it.n.length > 15 ? "..." : ""}`;
+        if (activePen === "--") { skipped.push(`・${it.n} (コード未設定)`); continue; }
+
+        const btn = this.siteAdapter.getButton(activePen);
+        if (btn) {
+          btn.scrollIntoView({ block: "nearest", inline: "nearest" });
+          const before = this.siteAdapter.getEditButtons();
+          Utils.simulateClick(btn); await Utils.sleep(80);
+          const after = this.siteAdapter.getEditButtons();
+          const newBtn = after.find(el => !before.includes(el)) || after[after.length - 1];
+          if (newBtn) {
+            const inBefore = this.siteAdapter.getSiteInputs();
+            Utils.simulateClick(newBtn); await Utils.sleep(50);
+            const inAfter = this.siteAdapter.getSiteInputs();
+            const targetIn = inAfter.find(el => !inBefore.includes(el)) || inAfter[inAfter.length - 1];
+            if (targetIn) { Utils.setInputValue(targetIn, it.n); targetIn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true })); }
+          }
+          count++; await Utils.sleep(60);
+        } else skipped.push(`・${it.n} (コード: ${activePen})`);
+      }
+      this.ui.els.run.disabled = false; this.ui.els.run.textContent = `完了 (${count}/${pTargets.length}件)`;
+      if (skipped.length) alert(`以下のメンバーはスキップされました：\n\n${skipped.join('\n')}`);
+      setTimeout(() => this.ui.els.run.textContent = "リストに追加する", 2000);
     }
   }
 
-  if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", () => new App().init()); } else { setTimeout(() => new App().init(), 500); }
+  document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", () => new App().init()) : setTimeout(() => new App().init(), 500);
 })();

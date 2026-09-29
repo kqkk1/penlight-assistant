@@ -94,7 +94,8 @@
         if (this.searchQuery && !it.n.toLowerCase().includes(this.searchQuery)) return false;
         return true;
       }).sort((a, b) => {
-        const priority = i => this.favorites.has(`${i.brand}:${i.n}`) ? 50 : (i.role === "brand" ? 40 : (i.role === "staff" ? 30 : (i.role === "unit_color" ? 20 : 0)));
+        // 星マーク(100) ＋ 役割による基本優先度（ブランド40, 事務員30...）で完璧な並び順を計算
+        const priority = i => (this.favorites.has(`${i.brand}:${i.n}`) ? 100 : 0) + (i.role === "brand" ? 40 : (i.role === "staff" ? 30 : (i.role === "unit_color" ? 20 : 0)));
         return (priority(b) - priority(a)) || ((a.rawIndex || 0) - (b.rawIndex || 0));
       });
     }
@@ -229,10 +230,11 @@
     injectStyles() {
       const s = document.createElement("style");
       s.textContent = `
-
+        /* ベースレイアウト */
         #ps-m { position:fixed; top:18px; right:18px; width:500px; height:750px; min-width:280px; min-height:240px; max-width:95vw; max-height:94vh; background:#1a1b26; color:#c0caf5; border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.85); z-index:999999999; padding:12px; display:flex; flex-direction:column; font-family:-apple-system,sans-serif; font-size:12px; border:1px solid #7aa2f7; box-sizing:border-box; }
         #ps-m * { box-sizing:border-box; }
         
+        /* 美しいカスタムスクロールバー */
         #ps-m ::-webkit-scrollbar { width: 6px; height: 6px; }
         #ps-m ::-webkit-scrollbar-track { background: transparent; }
         #ps-m ::-webkit-scrollbar-thumb { background: #3b4261; border-radius: 3px; }
@@ -248,6 +250,7 @@
         .ps-btn-primary { background:#7aa2f7; color:#15161e; font-weight:bold; }
         .ps-btn-primary:hover:not(:disabled) { background:#89b4fa; color:#15161e; }
         
+        /* 実行中（disabled）ボタンの完全グレーアウト仕様 */
         #ps-run:disabled { background: #2f3549 !important; color: #565f89 !important; cursor: not-allowed !important; box-shadow: none !important; opacity: 1 !important; transform: none !important; }
         .ps-btn:disabled { opacity: 0.6; cursor: not-allowed; }
         
@@ -556,7 +559,7 @@
         const isChk = s.selected.has(key), isFav = s.favorites.has(key);
         const tag = it.role === "brand" ? `<span class="ps-tag ps-tag-brand">ブランド</span>` : it.role === "staff" ? `<span class="ps-tag ps-tag-staff">事務員</span>` : it.role === "unit_color" ? `<span class="ps-tag ps-tag-unit">ユニット</span>` : "";
         const uTag = it.unit && !CONFIG.EXCLUDE_ROLES.includes(it.unit) && it.role === "idol" && !it.n.includes(it.unit) ? `<span style="font-size:9px;color:#565f89;margin-left:4px;">[${Utils.escapeHtml(it.unit)}]</span>` : "";
-        const star = ["idol", "unit_color"].includes(it.role) ? `<button type="button" class="ps-star-btn ${isFav ? 'active' : ''}" data-fav="${escKey}" title="推しピン留め">${isFav ? '★' : '☆'}</button>` : `<span style="width:28px;flex-shrink:0;"></span>`;
+        const star = `<button type="button" class="ps-star-btn ${isFav ? 'active' : ''}" data-fav="${escKey}" title="推しピン留め">${isFav ? '★' : '☆'}</button>`;
         return `<div class="ps-row ${isChk ? 'selected' : ''}" data-rowkey="${escKey}" style="${isSkip ? 'opacity:0.6;' : ''}"><input type="checkbox" data-key="${escKey}" class="ps-k" ${isChk ? "checked" : ""} ${isSkip ? 'disabled title="未設定"' : ''}>${star}<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${aCol};border:1px solid rgba(255,255,255,0.4);flex-shrink:0;"></span><span class="ps-name-label" data-key="${escKey}" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; ${isSkip ? 'text-decoration:line-through;opacity:0.6;' : ''}">${n}${tag}${uTag}</span><span style="color:${isSkip ? '#f7768e' : '#7dcfff'};font-family:monospace;font-weight:bold;font-size:12px;flex-shrink:0;margin-left:4px;">${aPen}</span></div>`;
       }).join("");
     }

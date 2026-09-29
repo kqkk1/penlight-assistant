@@ -1,6 +1,6 @@
 /**
- * Penlight Supporter Helper (for MIX PENLa PRO)
- * Version: 4.2.0
+ * Penlight Assistant (for MIX PENLa PRO)
+ * Version: 4.2.1
  */
 (() => {
   "use strict";
@@ -8,7 +8,7 @@
   if (window.__psHelperLoaded) return;
   window.__psHelperLoaded = true;
 
-  const CURRENT_VERSION = "4.2.0";
+  const CURRENT_VERSION = "4.2.1";
   
   const CONFIG = {
     GITHUB_REPO: "kqkk1/penlight-assistant",
@@ -229,19 +229,28 @@
     injectStyles() {
       const s = document.createElement("style");
       s.textContent = `
-        /* ★アニメーション(transition)を削除し、瞬時にリサイズされるように最適化 */
+
         #ps-m { position:fixed; top:18px; right:18px; width:500px; height:750px; min-width:280px; min-height:240px; max-width:95vw; max-height:94vh; background:#1a1b26; color:#c0caf5; border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.85); z-index:999999999; padding:12px; display:flex; flex-direction:column; font-family:-apple-system,sans-serif; font-size:12px; border:1px solid #7aa2f7; box-sizing:border-box; }
         #ps-m * { box-sizing:border-box; }
+        
+        #ps-m ::-webkit-scrollbar { width: 6px; height: 6px; }
+        #ps-m ::-webkit-scrollbar-track { background: transparent; }
+        #ps-m ::-webkit-scrollbar-thumb { background: #3b4261; border-radius: 3px; }
+        #ps-m ::-webkit-scrollbar-thumb:hover { background: #565f89; }
+        
         #ps-resize-handle { position:absolute; left:0; bottom:0; width:16px; height:16px; cursor:nesw-resize; z-index:10; display:flex; align-items:flex-end; padding:2px; }
         #ps-resize-handle::after { content:""; width:6px; height:6px; border-left:2px solid #565f89; border-bottom:2px solid #565f89; }
         #ps-resize-handle:hover::after { border-color:#7aa2f7; }
         #ps-fab { position:fixed; bottom:24px; right:24px; width:48px; height:48px; background:#7aa2f7; color:#15161e; border-radius:50%; box-shadow:0 8px 16px rgba(0,0,0,0.6); z-index:999999999; display:flex; justify-content:center; align-items:center; cursor:pointer; font-size:24px; user-select:none; transition:0.15s ease; border: 2px solid #1a1b26; }
         #ps-fab:hover { transform:scale(1.1); filter:brightness(1.1); }
         .ps-btn { padding:4px 8px; border:none; border-radius:4px; cursor:pointer; font-size:11px; background:#24283b; color:#a9b1d6; transition:0.12s ease; user-select:none; }
-        .ps-btn:hover { filter:brightness(1.2); color:#fff; }
+        .ps-btn:hover:not(:disabled) { filter:brightness(1.2); color:#fff; }
         .ps-btn-primary { background:#7aa2f7; color:#15161e; font-weight:bold; }
-        .ps-btn-primary:hover { background:#89b4fa; color:#15161e; }
-        .ps-opt-btn { padding: 4px 8px; font-size: 10px; flex: 1; text-align: center; }
+        .ps-btn-primary:hover:not(:disabled) { background:#89b4fa; color:#15161e; }
+        
+        #ps-run:disabled { background: #2f3549 !important; color: #565f89 !important; cursor: not-allowed !important; box-shadow: none !important; opacity: 1 !important; transform: none !important; }
+        .ps-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        
         .ps-input { background:#1f2335; color:#fff; border:1px solid #3b4261; border-radius:4px; padding:5px 8px; font-size:11px; outline:none; }
         .ps-input:focus { border-color:#7aa2f7; }
         
@@ -277,6 +286,8 @@
         .ps-drag-item.drag-over { border: 1px dashed #7aa2f7; filter: brightness(1.3); }
         .ps-drag-handle { cursor: grab; padding-right: 4px; color: #565f89; user-select: none; }
         
+        #ps-queue-list { max-height: 35vh; }
+        
         @media screen and (max-width: 600px) {
           #ps-m { top:auto !important; bottom:0 !important; right:0 !important; left:0 !important; width:100% !important; height:82dvh !important; max-height:calc(100dvh - 20px) !important; border-radius:16px 16px 0 0; border-bottom:none; padding: 14px 10px calc(24px + env(safe-area-inset-bottom, 16px)) 10px !important; }
           #ps-resize-handle { display: none !important; }
@@ -292,6 +303,7 @@
           #ps-run { padding: 14px !important; font-size: 15px !important; border-radius: 8px; font-weight: bold; min-height: 48px; flex-shrink: 0 !important; margin-top: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
           #ps-fab { bottom: 16px; right: 16px; width: 54px; height: 54px; font-size: 26px; }
           .ps-chip { padding: 4px 10px; font-size: 11px; }
+          #ps-queue-list { max-height: 28vh !important; }
         }
       `;
       document.head.appendChild(s);
@@ -304,7 +316,7 @@
         <div id="ps-m">
           <div id="ps-resize-handle" title="ドラッグしてサイズ変更"></div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #2f3549;flex-shrink:0;">
-            <b style="font-size:13px;color:#7aa2f7;">PRO-361/56 入力アシスト v${CURRENT_VERSION}</b>
+            <b style="font-size:13px;color:#7aa2f7;">Penlight Assistant (for MIX PENLa PRO) v${CURRENT_VERSION}</b>
             <div style="display:flex;gap:4px;">
               <button id="ps-toggle-opt" class="ps-btn" style="padding:2px 7px;">⚙設定</button>
               <button id="ps-minimize" class="ps-btn" style="padding:2px 8px;">ー</button>
@@ -367,7 +379,7 @@
                   <button id="ps-clear-queue" style="background:none;border:none;color:#f7768e;cursor:pointer;font-size:10px;margin-left:4px;">全クリア</button>
                 </div>
               </div>
-              <div id="ps-queue-list" style="display:none;flex-wrap:wrap;gap:4px;max-height:140px;overflow-y:auto;margin-top:5px;padding-top:5px;border-top:1px dashed #2f3549;"></div>
+              <div id="ps-queue-list" style="display:none;flex-wrap:wrap;gap:4px;overflow-y:auto;margin-top:5px;padding-top:5px;border-top:1px dashed #2f3549;"></div>
             </div>
             <div style="display:flex;gap:4px;flex-shrink:0;">
               <select id="ps-b" class="ps-input" style="flex:1;">${opts}</select>
@@ -577,6 +589,13 @@
           else map.has(pen) ? map.get(pen).n += " / " + it.n : map.set(pen, { ...it, n: it.n });
         });
         pTargets.push(...map.values());
+      }
+
+      const validTargets = pTargets.filter(it => this.store.getActivePen(it) !== "--");
+      if (validTargets.length > 50) {
+        alert(`【登録上限オーバー】\n一度に登録できるのは「50色」までです。\n（現在: ${validTargets.length}色 追加予定）\n\n※「連名登録」をONにすると、同じ色のアイドルが1色として合算されるため、上限に収まる場合があります。`);
+        this.ui.els.run.disabled = false;
+        return;
       }
 
       let count = 0, skipped = [];

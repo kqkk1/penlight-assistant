@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Penlight Assistant for MIX PENLa PRO-361",
-  "version": "4.2.2",
+  "version": "4.3.0",
   "description": "MIX PENLa PRO-361のWeb設定ツールを快適にする入力アシスト拡張機能",
   "permissions": [
     "storage"

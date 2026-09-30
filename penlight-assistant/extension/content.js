@@ -229,11 +229,11 @@
     injectStyles() {
       const s = document.createElement("style");
       s.textContent = `
-        /* ベースレイアウト */
+      
         #ps-m { position:fixed; top:18px; right:18px; width:500px; height:750px; min-width:280px; min-height:240px; max-width:95vw; max-height:94vh; background:#1a1b26; color:#c0caf5; border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.85); z-index:999999999; padding:12px; display:flex; flex-direction:column; font-family:-apple-system,sans-serif; font-size:12px; border:1px solid #7aa2f7; box-sizing:border-box; }
         #ps-m * { box-sizing:border-box; }
         
-        /* 美しいカスタムスクロールバー */
+  
         #ps-m ::-webkit-scrollbar { width: 6px; height: 6px; }
         #ps-m ::-webkit-scrollbar-track { background: transparent; }
         #ps-m ::-webkit-scrollbar-thumb { background: #3b4261; border-radius: 3px; }
@@ -249,7 +249,6 @@
         .ps-btn-primary { background:#7aa2f7; color:#15161e; font-weight:bold; }
         .ps-btn-primary:hover:not(:disabled) { background:#89b4fa; color:#15161e; }
         
-        /* 実行中（disabled）ボタンの完全グレーアウト仕様 */
         #ps-run:disabled { background: #2f3549 !important; color: #565f89 !important; cursor: not-allowed !important; box-shadow: none !important; opacity: 1 !important; transform: none !important; }
         .ps-btn:disabled { opacity: 0.6; cursor: not-allowed; }
         
@@ -290,10 +289,28 @@
         
         #ps-queue-list { max-height: 35vh; }
         
-        /* スマホ向けメディアクエリ（max-widthを100%に上書きして左寄りを修正） */
-        @media screen and (max-width: 600px) {
-          #ps-m { top:auto !important; bottom:0 !important; right:0 !important; left:0 !important; width:100% !important; max-width:100% !important; margin:0 !important; height:82dvh !important; max-height:calc(100dvh - 20px) !important; border-radius:16px 16px 0 0; border-bottom:none; padding: 14px 10px calc(24px + env(safe-area-inset-bottom, 16px)) 10px !important; }
+        @media screen and (max-width: 768px), screen and (max-height: 500px) {
+          #ps-m { 
+            top:auto !important; bottom:0 !important; right:0 !important; left:0 !important; 
+            width:100% !important; max-width:100% !important; margin:0 !important; 
+            height:85dvh !important; max-height:calc(100dvh - 20px) !important; 
+            border-radius:16px 16px 0 0; border-bottom:none; 
+
+            padding: 14px max(10px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)) !important; 
+          }
           #ps-resize-handle { display: none !important; }
+          
+          #ps-body { overflow-y: auto !important; padding-bottom: 5px !important; }
+          #ps-l { flex: 0 0 auto !important; height: auto !important; min-height: 150px !important; overflow: visible !important; }
+          
+  
+          #ps-run { 
+            position: sticky !important; bottom: 0 !important; z-index: 100 !important; 
+            margin-top: 10px !important; padding: 14px !important; font-size: 15px !important; 
+            border-radius: 8px; font-weight: bold; min-height: 48px; flex-shrink: 0 !important; 
+            box-shadow: 0 -15px 20px 5px #1a1b26 !important; 
+          }
+
           .ps-row { padding: 10px !important; margin-bottom: 4px; background: #181924; border: 1px solid #282b3d; border-radius: 6px; gap: 10px !important; }
           .ps-row.selected { background: #1f273d !important; border-color: #3d59a1 !important; }
           .ps-k { transform: scale(1.4) !important; margin: 0 4px 0 2px !important; }
@@ -303,10 +320,22 @@
           .ps-input { font-size: 13px; padding: 7px; }
           .ps-segment { height: 32px; }
           .ps-segment label, .ps-segment button { font-size: 11px; }
-          #ps-run { padding: 14px !important; font-size: 15px !important; border-radius: 8px; font-weight: bold; min-height: 48px; flex-shrink: 0 !important; margin-top: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
           #ps-fab { bottom: 16px; right: 16px; width: 54px; height: 54px; font-size: 26px; }
           .ps-chip { padding: 4px 10px; font-size: 11px; }
-          #ps-queue-list { max-height: 28vh !important; }
+          #ps-queue-list { max-height: 120px !important; }
+          
+  
+          #ps-sa, #ps-ca { padding: 10px 16px !important; font-size: 13px !important; font-weight: bold !important; border-radius: 6px !important; }
+          #ps-sa { background: #3d59a1 !important; color: #fff !important; }
+          #ps-ca { background: #2f3549 !important; color: #a9b1d6 !important; }
+        }
+
+  
+        @media screen and (max-height: 500px) and (orientation: landscape) {
+          #ps-m {
+            height: 100dvh !important; max-height: 100dvh !important;
+            border-radius: 0 !important; top: 0 !important;
+          }
         }
       `;
       document.head.appendChild(s);

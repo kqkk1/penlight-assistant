@@ -1,6 +1,6 @@
 /**
  * Penlight Assistant (for MIX PENLa PRO)
- * Version: 4.2.1
+ * Version: 4.2.2
  */
 (() => {
   "use strict";
@@ -8,7 +8,7 @@
   if (window.__psHelperLoaded) return;
   window.__psHelperLoaded = true;
 
-  const CURRENT_VERSION = "4.2.1";
+  const CURRENT_VERSION = "4.2.2";
   
   const CONFIG = {
     GITHUB_REPO: "kqkk1/penlight-assistant",
@@ -94,7 +94,6 @@
         if (this.searchQuery && !it.n.toLowerCase().includes(this.searchQuery)) return false;
         return true;
       }).sort((a, b) => {
-        // 星マーク(100) ＋ 役割による基本優先度（ブランド40, 事務員30...）で完璧な並び順を計算
         const priority = i => (this.favorites.has(`${i.brand}:${i.n}`) ? 100 : 0) + (i.role === "brand" ? 40 : (i.role === "staff" ? 30 : (i.role === "unit_color" ? 20 : 0)));
         return (priority(b) - priority(a)) || ((a.rawIndex || 0) - (b.rawIndex || 0));
       });
@@ -291,8 +290,9 @@
         
         #ps-queue-list { max-height: 35vh; }
         
+        /* スマホ向けメディアクエリ（max-widthを100%に上書きして左寄りを修正） */
         @media screen and (max-width: 600px) {
-          #ps-m { top:auto !important; bottom:0 !important; right:0 !important; left:0 !important; width:100% !important; height:82dvh !important; max-height:calc(100dvh - 20px) !important; border-radius:16px 16px 0 0; border-bottom:none; padding: 14px 10px calc(24px + env(safe-area-inset-bottom, 16px)) 10px !important; }
+          #ps-m { top:auto !important; bottom:0 !important; right:0 !important; left:0 !important; width:100% !important; max-width:100% !important; margin:0 !important; height:82dvh !important; max-height:calc(100dvh - 20px) !important; border-radius:16px 16px 0 0; border-bottom:none; padding: 14px 10px calc(24px + env(safe-area-inset-bottom, 16px)) 10px !important; }
           #ps-resize-handle { display: none !important; }
           .ps-row { padding: 10px !important; margin-bottom: 4px; background: #181924; border: 1px solid #282b3d; border-radius: 6px; gap: 10px !important; }
           .ps-row.selected { background: #1f273d !important; border-color: #3d59a1 !important; }

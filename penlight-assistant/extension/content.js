@@ -158,7 +158,7 @@
   }
 
   class SiteAdapter {
-    constructor() { this.btnCache = new Map(); this.indexMap = new Map(); }
+    constructor() { this.btnCache = new Map(); }
     startObserving() {
       if (this.observer) return;
       this.observer = new MutationObserver(m => {
@@ -170,10 +170,10 @@
       this.observer.observe(document.body, { childList: true, subtree: true });
     }
     buildCache() {
-      this.btnCache.clear(); this.indexMap.clear();
+      this.btnCache.clear();
       document.querySelectorAll(CONFIG.SITE_RULES.BTN_TITLE).forEach(btn => {
         const m = (btn.getAttribute("title") || "").match(CONFIG.SITE_RULES.BTN_TITLE_REGEX);
-        if (m) { this.indexMap.set(m[2].toUpperCase(), parseInt(m[1], 10)); this.btnCache.set(m[2].toUpperCase(), btn); }
+        if (m) { this.btnCache.set(m[2].toUpperCase(), btn); }
       });
     }
     getButton(code) {
@@ -186,12 +186,11 @@
     }
     getRankCalculator() {
       return codeStr => {
-        if (codeStr === "--") return 999999;
-        const code = (codeStr || "").trim().toUpperCase();
-        if (!this.indexMap.size) this.buildCache();
-        if (this.indexMap.has(code)) return this.indexMap.get(code);
+        if (!codeStr || codeStr === "--") return 99999999;
+        const code = codeStr.trim().toUpperCase();
         const m = code.match(/^([A-Z]+)(\d+)?(?:-(\d+))?/);
-        return m ? (CONFIG.GROUP_ORDER[m[1]] || 90) * 10000 + (parseInt(m[2] || "0", 10) * 100) + parseInt(m[3] || "0", 10) : 99999;
+        if (!m) return 99999999;
+        return (CONFIG.GROUP_ORDER[m[1]] || 90) * 1000000 + (parseInt(m[2] || "0", 10) * 1000) + parseInt(m[3] || "0", 10);
       };
     }
     getSiteInputs() {
@@ -397,7 +396,6 @@
           #ps-sa { background: #3d59a1 !important; color: #fff !important; }
           #ps-ca { background: #2f3549 !important; color: #a9b1d6 !important; }
           
-
           #ps-m .ps-drag-handle { 
             padding: 8px 12px 8px 6px !important; 
             margin: -8px 0 -8px -6px !important; 
@@ -654,10 +652,18 @@
         const orig = e.ext.textContent; e.ext.textContent = "⏳抽出中..."; e.ext.disabled = true; let added = 0;
         try {
           await Promise.all(CONFIG.SHEETS.map(async sheet => { if (!s.cache[sheet]) s.cache[sheet] = await DataFetcher.fetch(sheet, false); }));
+          
+          const addedNames = new Set([...s.selected.values()].map(it => it.n));
+          
           CONFIG.SHEETS.forEach(sheet => (s.cache[sheet] || []).forEach(it => {
             const cleanName = it.n.replace(/\s+/g, '').toLowerCase();
             if (it.role === "idol" && cleanName.length > 1 && text.includes(cleanName)) {
-              const key = `${it.brand}:${it.n}`; if (!s.selected.has(key)) { s.selected.set(key, { ...it, selectOrder: ++s.counter }); added++; }
+              if (!addedNames.has(it.n)) {
+                const key = `${it.brand}:${it.n}`;
+                s.selected.set(key, { ...it, selectOrder: ++s.counter });
+                addedNames.add(it.n);
+                added++;
+              }
             }
           }));
           this.renderQueue(); this.renderList();

@@ -1,6 +1,6 @@
 /**
  * Penlight Assistant (for MIX PENLa PRO)
- * Version: 4.3.0
+ * Version: 4.4.0 (Notion Auto-Cast Integration)
  */
 (() => {
   "use strict";
@@ -8,7 +8,7 @@
   if (window.__psHelperLoaded) return;
   window.__psHelperLoaded = true;
 
-  const CURRENT_VERSION = "4.3.0";
+  const CURRENT_VERSION = "4.4.0";
   
   const CONFIG = {
     GITHUB_REPO: "kqkk1/penlight-assistant",
@@ -38,7 +38,8 @@
     setInputValue: (input, value) => {
       if (!input) return;
       try {
-        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(input, value);
+        const proto = input instanceof HTMLTextAreaElement ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+        Object.getOwnPropertyDescriptor(proto, "value").set.call(input, value);
       } catch (e) { input.value = value; }
       ["input", "change"].forEach(e => input.dispatchEvent(new Event(e, { bubbles: true })));
     },
@@ -666,6 +667,14 @@
               }
             }
           }));
+
+          // 抽出で1名以上追加されたら、「追加予定」のリストだけ自動で開いて確認しやすくする（ブランドタブは切り替えない）
+          if (added > 0 && !this.isQueueOpen) {
+            this.isQueueOpen = true;
+            e.qList.style.display = "flex";
+            e.qArr.textContent = "▴";
+          }
+
           this.renderQueue(); this.renderList();
           if (added > 0) this.showToast(`🎉 抽出完了！\n合計 ${added} 名を追加しました。`);
           else this.showToast("一致するアイドルが見つかりませんでした。", true);
@@ -740,9 +749,15 @@
 
   class App {
     constructor() { this.store = new Store(); this.siteAdapter = new SiteAdapter(); this.ui = new UIManager(this, this.store, this.siteAdapter); }
-    init() {
+    async init() {
       if (!window.location.href.includes("penlight-supporter.onrender.com")) return;
-      if (this.ui.inject()) { this.siteAdapter.startObserving(); this.ui.renderQueue(); this.loadData(); }
+      if (this.ui.inject()) {
+        this.siteAdapter.startObserving();
+        this.ui.renderQueue();
+        await this.loadData();
+        // ★ 起動時にURLパラメータ（?auto_cast=...）があれば、抽出ボタン→入力→OKを自動実行
+        await this.checkUrlAutoExtract();
+      }
     }
     async loadData(force = false) {
       if (!this.store.cache[this.store.currentBrand] || force) {
@@ -750,6 +765,34 @@
         this.store.cache[this.store.currentBrand] = await DataFetcher.fetch(this.store.currentBrand, force);
       }
       this.ui.renderUnitChips(); this.ui.renderList();
+    }
+    // ★ NotionからのURLパラメータを受け取り、「📋抽出」ボタンを押してテキストを入れ「OK」を押す処理
+    async checkUrlAutoExtract() {
+      try {
+        const urlObj = new URL(window.location.href);
+        const castParam = urlObj.searchParams.get("auto_cast") || urlObj.searchParams.get("cast");
+        if (!castParam) return;
+
+        // リロード時に二重実行されないよう、アドレスバーからパラメータを消去
+        urlObj.searchParams.delete("auto_cast");
+        urlObj.searchParams.delete("cast");
+        window.history.replaceState({}, document.title, urlObj.pathname + urlObj.search + urlObj.hash);
+
+        // 1. 「📋抽出」ボタンをクリックしてモーダルを開く
+        this.ui.els.ext.click();
+        await Utils.sleep(150);
+
+        // 2. モーダルの入力欄にアイドル一覧を入力して「OK」ボタンをクリックする
+        const modalInput = document.getElementById("ps-modal-input");
+        const modalOk = document.getElementById("ps-modal-ok");
+        if (modalInput && modalOk) {
+          Utils.setInputValue(modalInput, castParam);
+          await Utils.sleep(100);
+          modalOk.click();
+        }
+      } catch (e) {
+        console.error("Penlight Assistant: Auto extract failed", e);
+      }
     }
     async executeAutoAdd() {
       const targets = this.store.getSortedSelectedList(this.siteAdapter.getRankCalculator());

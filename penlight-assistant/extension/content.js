@@ -1,6 +1,6 @@
 /**
  * Penlight Assistant (for MIX PENLa PRO)
- * Version: 4.4.0 (Notion Auto-Cast Integration)
+ * Version: 4.4.1
  */
 (() => {
   "use strict";
@@ -8,7 +8,7 @@
   if (window.__psHelperLoaded) return;
   window.__psHelperLoaded = true;
 
-  const CURRENT_VERSION = "4.4.0";
+  const CURRENT_VERSION = "4.4.1";
   
   const CONFIG = {
     GITHUB_REPO: "kqkk1/penlight-assistant",
@@ -755,7 +755,7 @@
         this.siteAdapter.startObserving();
         this.ui.renderQueue();
         await this.loadData();
-        // ★ 起動時にURLパラメータ（?auto_cast=...）があれば、抽出ボタン→入力→OKを自動実行
+        // ★ 起動時にURLパラメータ（?auto_cast=... や &special=1）があれば自動実行
         await this.checkUrlAutoExtract();
       }
     }
@@ -766,23 +766,38 @@
       }
       this.ui.renderUnitChips(); this.ui.renderList();
     }
-    // ★ NotionからのURLパラメータを受け取り、「📋抽出」ボタンを押してテキストを入れ「OK」を押す処理
+    // ★ NotionからのURLパラメータ（?auto_cast=... および &special=1）を受け取り、特殊色トグルON＆自動抽出を実行する処理
     async checkUrlAutoExtract() {
       try {
         const urlObj = new URL(window.location.href);
         const castParam = urlObj.searchParams.get("auto_cast") || urlObj.searchParams.get("cast");
-        if (!castParam) return;
+        const isSpecial = urlObj.searchParams.get("special") === "1" || urlObj.searchParams.get("special") === "true";
+
+        if (!castParam && !isSpecial) return;
 
         // リロード時に二重実行されないよう、アドレスバーからパラメータを消去
         urlObj.searchParams.delete("auto_cast");
         urlObj.searchParams.delete("cast");
+        urlObj.searchParams.delete("special");
         window.history.replaceState({}, document.title, urlObj.pathname + urlObj.search + urlObj.hash);
 
-        // 1. 「📋抽出」ボタンをクリックしてモーダルを開く
+        // 1. &special=1 が指定されている場合、「特殊色」トグル（ps-toggle-variant）と内部状態（showVariant）をONにする
+        if (isSpecial) {
+          this.store.showVariant = true;
+          if (this.ui.els.toggles?.var) {
+            this.ui.els.toggles.var.checked = true;
+          }
+          this.ui.renderQueue();
+          this.ui.renderList();
+        }
+
+        if (!castParam) return;
+
+        // 2. 「📋抽出」ボタンをクリックしてモーダルを開く
         this.ui.els.ext.click();
         await Utils.sleep(150);
 
-        // 2. モーダルの入力欄にアイドル一覧を入力して「OK」ボタンをクリックする
+        // 3. モーダルの入力欄にアイドル一覧を入力して「OK」ボタンをクリックする
         const modalInput = document.getElementById("ps-modal-input");
         const modalOk = document.getElementById("ps-modal-ok");
         if (modalInput && modalOk) {

@@ -2,7 +2,7 @@
  * Penlight Assistant - ブックマークレット用（自動生成ファイル）
  * ※このファイルは GitHub Actions が自動で作ります。直接編集しないでください。
  * 元ファイル: config.js, utils.js, grouper.js, data.js, site.js, styles.js, ui.js, main.js
- * version: 4.5.0 / build: 2026-11-17T18:00:46.390Z
+ * version: 4.6.0 / build: 2026-11-17T20:45:10.767Z
  */
 (() => {
 "use strict";
@@ -13,13 +13,15 @@
  * バージョン、スプシID、しきい値、56色名など。数値の調整はこのファイルだけで完結します。
  */
 
-const CURRENT_VERSION = "4.5.0";
+const CURRENT_VERSION = "4.6.0";
 
 const CONFIG = {
   GITHUB_REPO: "kqkk1/penlight-assistant",
   DEFAULT_SPREADSHEET_ID: "1qQ1ezrI5ujr4YIi4hO3EmPSLRTULKtSSV_LQ1Q6SNGo",
+  // 標準のスプシの内容を GitHub Actions が書き出したファイル（tools/build-colors.js）。カスタムスプシIDのときは使わず、スプシを直接読む
+  COLORS_URL: "https://cdn.jsdelivr.net/gh/kqkk1/penlight-assistant@main/penlight-assistant/data/colors.json",
   SHEETS: ["765AS", "ミリオン", "学マス", "デレマス", "シャニマス", "SideM", "876", "その他"],
-  KEYS: { FAV: "ps_fav_idols_v2", ID: "ps_custom_sheet_id", PEN: "ps_pen_mode", DUP: "ps_merge_dup", SORT: "ps_sort_mode", MERGE: "ps_merge_mode", STRENGTH: "ps_family_strength" },
+  KEYS: { FAV: "ps_fav_idols_v2", ID: "ps_custom_sheet_id", PEN: "ps_pen_mode", DUP: "ps_merge_dup", SORT: "ps_sort_mode", MERGE: "ps_merge_mode", STRENGTH: "ps_family_strength", BUNDLE: "ps_cache_colors" },
   CACHE_EXPIRY: 24 * 60 * 60 * 1000,
   MAX_COLORS: 50,
   TITLE_MAX: 12, // 公式サイトのタイトル欄の文字数上限
@@ -288,7 +290,7 @@ class ColorGrouper {
 /**
  * Penlight Assistant (for MIX PENLa PRO) - data.js
  * データと状態
- * Store: 選択状態・設定の保存 / DataFetcher: スプシ取得とキャッシュ
+ * Store: 選択状態・設定の保存 / DataFetcher: カラーデータの取得（colors.json またはスプシ）とキャッシュ
  */
 
 class Store {
@@ -375,39 +377,111 @@ class Store {
 }
 
 class DataFetcher {
+  /**
+   * 1シート分（CSVを解析した行の配列）→ アイドルの一覧。1行目は見出し。
+   * colors.json を作るスクリプト（tools/build-colors.js）も、この関数をそのまま使う（読み取りの規則を1か所にまとめるため）
+   */
+  static parseRows(rows, sheetName) {
+    if (!rows || rows.length <= 1) return [];
+    const items = [], seen = new Set();
+    const ext = r => r ? (r.match(/[A-Za-z]+[0-9]+(?:-[0-9]+)?/)?.[0].toUpperCase() || r.replace(/\s*△.*/, "").trim()) : "";
+    const clean = c => c ? c.replace(/^"|"$/g, "").trim() : "";
+    for (let i = 1; i < rows.length; i++) {
+      const cols = rows[i]; if (cols.length < 3) continue;
+      let name = clean(cols[0]);
+      // シート名が見つからないと、スプシは先頭のシート（765AS）を返してくる。そのときは空として扱う
+      if (sheetName !== "765AS" && name === "天海春香" && !items.length) return [];
+      if (sheetName === "876" && name.includes("秋月涼")) name = "秋月涼";
+
+      const [p361, p56, unit, sortCode] = [ext(clean(cols[2])), ext(clean(cols[3])), clean(cols[4]), ext(clean(cols[8]))];
+      if (name && (p361 || p56) && !seen.has(name)) {
+        // 属性(E列)で判定。E列が空のときだけ名前から推定（名前に「色」「プロ」等を含むアイドルの誤判定を防ぐ）
+        const role = unit
+          ? (/ブランド/.test(unit) ? "brand" : /事務員/.test(unit) ? "staff" : /ユニット|色|カラー/.test(unit) ? "unit_color" : "idol")
+          : (/ブランド|プロダクション|学園/.test(name) ? "brand" : /事務員|社長/.test(name) ? "staff" : "idol");
+        const aliases = [...new Set([...DataFetcher.jointNames(name), ...clean(cols[9]).split(/[,、，\n]+/)].map(a => a.trim()))].filter(a => a && a !== name);
+        seen.add(name);
+        items.push({ n: name, c: clean(cols[1]), p_361: p361, p_56: p56, unit, c_v: clean(cols[5]), p_v_361: ext(clean(cols[6])), p_v_56: ext(clean(cols[7])), sort_code: sortCode, brand: sheetName, role, rawIndex: i, ...(aliases.length ? { aliases } : {}) });
+      }
+    }
+    return items;
+  }
+
+  /**
+   * 照合用の別名（ボタンは1つのまま、出演者の照合にだけ使う）
+   *  - A列が「双海亜美・双海真美」のように、同じ名字で始まる名前を「・」でつないだ形なら、1人ずつの名前でも照合する
+   *    （名字が違う「イヴ・サンタクロース」のような1人の名前は分けない）
+   *  - J列「別名」（任意）にカンマ区切りで書いた名前でも照合する（A列の書き方を変えたくないとき用）
+   */
+  static jointNames(name) {
+    const parts = String(name || "").split("・").map(s => s.trim()).filter(Boolean);
+    const head = s => [...s].slice(0, 2).join("");
+    return parts.length >= 2 && parts.every(p => [...p].length >= 3 && head(p) === head(parts[0])) ? parts : [];
+  }
+
+  // 標準のスプシを使っているときは colors.json（1回の取得で全ブランド）、カスタムスプシIDのときは、これまで通りスプシをシートごとに読む
   static async fetch(sheetName, force = false) {
+    DataFetcher.lastError = false;
+    if (!localStorage.getItem(CONFIG.KEYS.ID)) {
+      const bundle = await DataFetcher.loadBundle(force);
+      if (bundle) { DataFetcher.applySheetList(bundle.sheets); return bundle.items[sheetName] || []; }
+      // colors.json が読めないときは、スプシを直接読む（従来の方法）
+    }
+    return DataFetcher.fetchSheet(sheetName, force);
+  }
+
+  // colors.json の取得（同時に呼ばれても1回だけ取りに行く）。取れなければ、期限切れでも前回のものを使う。どちらもなければ null
+  static loadBundle(force = false) {
+    if (!force && DataFetcher._bundle) return Promise.resolve(DataFetcher._bundle);
+    if (!force && DataFetcher._bundleFailed) return Promise.resolve(null);   // この画面で一度失敗したら、↻ を押すまでスプシ直読みで動かす
+    if (DataFetcher._bundleLoading) return DataFetcher._bundleLoading;
+    DataFetcher._bundleLoading = (async () => {
+      let cached = null;
+      try { cached = JSON.parse(localStorage.getItem(CONFIG.KEYS.BUNDLE)); } catch (e) {}
+      if (!force && cached?.data && Date.now() - cached.timestamp < CONFIG.CACHE_EXPIRY) return cached.data;
+      try {
+        const res = await fetch(CONFIG.COLORS_URL, { cache: force ? "reload" : "default" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data || typeof data.items !== "object" || !Object.keys(data.items).length) throw new Error("invalid colors.json");
+        try { localStorage.setItem(CONFIG.KEYS.BUNDLE, JSON.stringify({ timestamp: Date.now(), data })); } catch (e) {}
+        CONFIG.SHEETS.forEach(sheet => localStorage.removeItem(`ps_cache_${sheet}`));   // 以前のシートごとのキャッシュは、もう使わないので消す
+        return data;
+      } catch (e) {
+        return cached?.data || null;
+      }
+    })();
+    return DataFetcher._bundleLoading.then(data => {
+      DataFetcher._bundle = data; DataFetcher._bundleFailed = !data; DataFetcher._bundleLoading = null;
+      return data;
+    });
+  }
+
+  // colors.json に書かれたブランドの一覧を使う（ブランドを増やしても、拡張機能の更新が要らないように）
+  static applySheetList(list) {
+    if (!Array.isArray(list) || !list.length || !list.every(x => typeof x === "string" && x)) return;
+    if (list.join("\u0000") === CONFIG.SHEETS.join("\u0000")) return;
+    CONFIG.SHEETS.splice(0, CONFIG.SHEETS.length, ...list);
+    DataFetcher.sheetsChanged = true;
+  }
+
+  static clearCache() {
+    localStorage.removeItem(CONFIG.KEYS.BUNDLE);
+    CONFIG.SHEETS.forEach(sheet => localStorage.removeItem(`ps_cache_${sheet}`));
+    DataFetcher._bundle = null; DataFetcher._bundleFailed = false;
+  }
+
+  // スプシをシートごとに直接読む（カスタムスプシID、または colors.json が読めないとき）
+  static async fetchSheet(sheetName, force = false) {
     const cacheKey = `ps_cache_${sheetName}`;
     let cached = null;
     try { cached = JSON.parse(localStorage.getItem(cacheKey)); } catch (e) {}
-    DataFetcher.lastError = false;
     if (!force && cached && Date.now() - cached.timestamp < CONFIG.CACHE_EXPIRY) return cached.data;
     try {
       const targetId = localStorage.getItem(CONFIG.KEYS.ID) || CONFIG.DEFAULT_SPREADSHEET_ID;
       const res = await fetch(`https://docs.google.com/spreadsheets/d/${targetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}&_=${Date.now()}`);
       if (!res.ok) throw new Error("Network error");
-      const rows = Utils.parseCSV(await res.text());
-      if (rows.length <= 1) return [];
-
-      const items = [], seen = new Set();
-      const ext = r => r ? (r.match(/[A-Za-z]+[0-9]+(?:-[0-9]+)?/)?.[0].toUpperCase() || r.replace(/\s*△.*/, "").trim()) : "";
-      const clean = c => c ? c.replace(/^"|"$/g, "").trim() : "";
-      
-      for (let i = 1; i < rows.length; i++) {
-        const cols = rows[i]; if (cols.length < 3) continue;
-        let name = clean(cols[0]);
-        if (sheetName !== "765AS" && name === "天海春香" && !items.length) return [];
-        if (sheetName === "876" && name.includes("秋月涼")) name = "秋月涼";
-
-        const [p361, p56, unit, sortCode] = [ext(clean(cols[2])), ext(clean(cols[3])), clean(cols[4]), ext(clean(cols[8]))];
-        if (name && (p361 || p56) && !seen.has(name)) {
-          // 属性(E列)で判定。E列が空のときだけ名前から推定（名前に「色」「プロ」等を含むアイドルの誤判定を防ぐ）
-          const role = unit
-            ? (/ブランド/.test(unit) ? "brand" : /事務員/.test(unit) ? "staff" : /ユニット|色|カラー/.test(unit) ? "unit_color" : "idol")
-            : (/ブランド|プロダクション|学園/.test(name) ? "brand" : /事務員|社長/.test(name) ? "staff" : "idol");
-          seen.add(name);
-          items.push({ n: name, c: clean(cols[1]), p_361: p361, p_56: p56, unit, c_v: clean(cols[5]), p_v_361: ext(clean(cols[6])), p_v_56: ext(clean(cols[7])), sort_code: sortCode, brand: sheetName, role, rawIndex: i });
-        }
-      }
+      const items = DataFetcher.parseRows(Utils.parseCSV(await res.text()), sheetName);
       try { localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), data: items })); } catch (e) {}
       return items;
     } catch (e) {
@@ -617,6 +691,7 @@ const PS_STYLES = `
 
   @media screen and (max-height: 500px) and (orientation: landscape) {
     #ps-m { height: 100dvh !important; max-height: 100dvh !important; border-radius: 0 !important; top: 0 !important; }
+  }
 `;
 
 // ===== ui.js =====
@@ -734,8 +809,18 @@ class UIManager {
     document.head.appendChild(s);
   }
 
+  // ブランドの選択肢。colors.json のシート一覧が変わったときにも呼ばれる（表示中のブランドがなくなったら先頭へ）
+  brandOptionsHTML() {
+    return CONFIG.SHEETS.map(k => `<option value="${Utils.escapeHtml(k)}">${Utils.escapeHtml(k)}</option>`).join("") + `<option value="__search" hidden>🔍 全ブランドから検索中</option>`;
+  }
+  renderBrandOptions() {
+    const s = this.store;
+    if (!CONFIG.SHEETS.includes(s.currentBrand)) { s.currentBrand = CONFIG.SHEETS[0]; s.selectedUnit = ""; }
+    this.els.brand.innerHTML = this.brandOptionsHTML();
+    this.els.brand.value = s.searchQuery ? "__search" : s.currentBrand;
+  }
+
   buildHTML() {
-    const opts = CONFIG.SHEETS.map(k => `<option value="${k}">${k}</option>`).join("");
     const customId = localStorage.getItem(CONFIG.KEYS.ID) || "";
     document.body.insertAdjacentHTML("beforeend", `<div id="ps-fab" style="display:none;" title="アシストを開く">✨</div>
       <div id="ps-m">
@@ -810,7 +895,7 @@ class UIManager {
             <div id="ps-queue-list" style="display:none;flex-wrap:wrap;gap:4px;overflow-y:auto;margin-top:5px;padding-top:5px;border-top:1px dashed #2f3549;"></div>
           </div>
           <div style="display:flex;gap:4px;flex-shrink:0;">
-            <select id="ps-b" class="ps-input" style="flex:1;min-width:0;">${opts}<option value="__search" hidden>🔍 全ブランドから検索中</option></select>
+            <select id="ps-b" class="ps-input" style="flex:1;min-width:0;">${this.brandOptionsHTML()}</select>
             <input type="search" id="ps-search" class="ps-input" placeholder="全ブランドから検索" style="width:130px;">
             <button id="ps-reload" class="ps-btn" title="再取得・キャッシュクリア" style="padding:4px 8px;">↻</button>
           </div>
@@ -892,7 +977,7 @@ class UIManager {
       const val = e.sid.value.trim();
       val ? localStorage.setItem(CONFIG.KEYS.ID, val) : localStorage.removeItem(CONFIG.KEYS.ID);
       this.showToast(val ? "カスタムIDを適用しました。\nデータを再取得します。" : "デフォルトに戻しました。\nデータを再取得します。");
-      CONFIG.SHEETS.forEach(sheet => localStorage.removeItem(`ps_cache_${sheet}`));
+      DataFetcher.clearCache();
       s.cache = {}; this.app.loadData(true);
     };
     
@@ -906,7 +991,7 @@ class UIManager {
       this.app.loadData(false);
     };
     
-    e.reload.onclick = () => { CONFIG.SHEETS.forEach(sheet => localStorage.removeItem(`ps_cache_${sheet}`)); s.cache = {}; this.app.loadData(true); };
+    e.reload.onclick = () => { DataFetcher.clearCache(); s.cache = {}; this.app.loadData(true); };
     e.sa.onclick = () => { s.getVisibleList().forEach(it => { const key = `${it.brand}:${it.n}`; if (!s.selected.has(key)) s.selected.set(key, { ...it, selectOrder: ++s.counter }); }); this.renderQueue(); this.renderList(); };
     e.ca.onclick = () => { (s.searchQuery ? s.getVisibleList() : (s.cache[s.currentBrand] || [])).forEach(it => s.selected.delete(`${it.brand}:${it.n}`)); this.renderQueue(); this.renderList(); };
     e.clear.onclick = () => { s.clearSelection(); this.renderQueue(); this.renderList(); };
@@ -1044,7 +1129,7 @@ class UIManager {
       await this.app.ensureAllLoaded();
       const addedNames = new Set([...s.selected.values()].map(it => it.n));
       const candidates = CONFIG.SHEETS.flatMap(sheet => (s.cache[sheet] || []).filter(it => it.role === "idol"))
-        .map(it => ({ it, key: Utils.normalizeText(it.n) }))
+        .flatMap(it => [it.n, ...(it.aliases || [])].map(name => ({ it, key: Utils.normalizeText(name) })))   // J列「別名」でも照合する
         .filter(c => c.key.length > 1)
         .sort((a, b) => b.key.length - a.key.length);
       candidates.forEach(({ it, key }) => {
@@ -1174,6 +1259,13 @@ class App {
     if (!this.store.cache[this.store.currentBrand] || force) {
       this.ui.els.list.innerHTML = `<span style="color:#aaa;">${force ? '再取得中...' : '読込中...'}</span>`;
       this.store.cache[this.store.currentBrand] = await DataFetcher.fetch(this.store.currentBrand, force);
+      // colors.json のブランド一覧が変わっていたら、選択肢を作り直す
+      if (DataFetcher.sheetsChanged) {
+        DataFetcher.sheetsChanged = false;
+        const before = this.store.currentBrand;
+        this.ui.renderBrandOptions();
+        if (this.store.currentBrand !== before) this.store.cache[this.store.currentBrand] = await DataFetcher.fetch(this.store.currentBrand, false);
+      }
     }
     this.ui.renderUnitChips(); this.ui.renderList();
     if (DataFetcher.lastError && !this.store.cache[this.store.currentBrand]?.length) {

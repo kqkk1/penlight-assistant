@@ -142,4 +142,5 @@ const PS_STYLES = `
 
   @media screen and (max-height: 500px) and (orientation: landscape) {
     #ps-m { height: 100dvh !important; max-height: 100dvh !important; border-radius: 0 !important; top: 0 !important; }
+  }
 `;

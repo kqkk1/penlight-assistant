@@ -24,6 +24,13 @@ class App {
     if (!this.store.cache[this.store.currentBrand] || force) {
       this.ui.els.list.innerHTML = `<span style="color:#aaa;">${force ? '再取得中...' : '読込中...'}</span>`;
       this.store.cache[this.store.currentBrand] = await DataFetcher.fetch(this.store.currentBrand, force);
+      // colors.json のブランド一覧が変わっていたら、選択肢を作り直す
+      if (DataFetcher.sheetsChanged) {
+        DataFetcher.sheetsChanged = false;
+        const before = this.store.currentBrand;
+        this.ui.renderBrandOptions();
+        if (this.store.currentBrand !== before) this.store.cache[this.store.currentBrand] = await DataFetcher.fetch(this.store.currentBrand, false);
+      }
     }
     this.ui.renderUnitChips(); this.ui.renderList();
     if (DataFetcher.lastError && !this.store.cache[this.store.currentBrand]?.length) {

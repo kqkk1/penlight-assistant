@@ -113,8 +113,18 @@ class UIManager {
     document.head.appendChild(s);
   }
 
+  // ブランドの選択肢。colors.json のシート一覧が変わったときにも呼ばれる（表示中のブランドがなくなったら先頭へ）
+  brandOptionsHTML() {
+    return CONFIG.SHEETS.map(k => `<option value="${Utils.escapeHtml(k)}">${Utils.escapeHtml(k)}</option>`).join("") + `<option value="__search" hidden>🔍 全ブランドから検索中</option>`;
+  }
+  renderBrandOptions() {
+    const s = this.store;
+    if (!CONFIG.SHEETS.includes(s.currentBrand)) { s.currentBrand = CONFIG.SHEETS[0]; s.selectedUnit = ""; }
+    this.els.brand.innerHTML = this.brandOptionsHTML();
+    this.els.brand.value = s.searchQuery ? "__search" : s.currentBrand;
+  }
+
   buildHTML() {
-    const opts = CONFIG.SHEETS.map(k => `<option value="${k}">${k}</option>`).join("");
     const customId = localStorage.getItem(CONFIG.KEYS.ID) || "";
     document.body.insertAdjacentHTML("beforeend", `<div id="ps-fab" style="display:none;" title="アシストを開く">✨</div>
       <div id="ps-m">
@@ -189,7 +199,7 @@ class UIManager {
             <div id="ps-queue-list" style="display:none;flex-wrap:wrap;gap:4px;overflow-y:auto;margin-top:5px;padding-top:5px;border-top:1px dashed #2f3549;"></div>
           </div>
           <div style="display:flex;gap:4px;flex-shrink:0;">
-            <select id="ps-b" class="ps-input" style="flex:1;min-width:0;">${opts}<option value="__search" hidden>🔍 全ブランドから検索中</option></select>
+            <select id="ps-b" class="ps-input" style="flex:1;min-width:0;">${this.brandOptionsHTML()}</select>
             <input type="search" id="ps-search" class="ps-input" placeholder="全ブランドから検索" style="width:130px;">
             <button id="ps-reload" class="ps-btn" title="再取得・キャッシュクリア" style="padding:4px 8px;">↻</button>
           </div>
@@ -271,7 +281,7 @@ class UIManager {
       const val = e.sid.value.trim();
       val ? localStorage.setItem(CONFIG.KEYS.ID, val) : localStorage.removeItem(CONFIG.KEYS.ID);
       this.showToast(val ? "カスタムIDを適用しました。\nデータを再取得します。" : "デフォルトに戻しました。\nデータを再取得します。");
-      CONFIG.SHEETS.forEach(sheet => localStorage.removeItem(`ps_cache_${sheet}`));
+      DataFetcher.clearCache();
       s.cache = {}; this.app.loadData(true);
     };
     
@@ -285,7 +295,7 @@ class UIManager {
       this.app.loadData(false);
     };
     
-    e.reload.onclick = () => { CONFIG.SHEETS.forEach(sheet => localStorage.removeItem(`ps_cache_${sheet}`)); s.cache = {}; this.app.loadData(true); };
+    e.reload.onclick = () => { DataFetcher.clearCache(); s.cache = {}; this.app.loadData(true); };
     e.sa.onclick = () => { s.getVisibleList().forEach(it => { const key = `${it.brand}:${it.n}`; if (!s.selected.has(key)) s.selected.set(key, { ...it, selectOrder: ++s.counter }); }); this.renderQueue(); this.renderList(); };
     e.ca.onclick = () => { (s.searchQuery ? s.getVisibleList() : (s.cache[s.currentBrand] || [])).forEach(it => s.selected.delete(`${it.brand}:${it.n}`)); this.renderQueue(); this.renderList(); };
     e.clear.onclick = () => { s.clearSelection(); this.renderQueue(); this.renderList(); };
@@ -423,7 +433,7 @@ class UIManager {
       await this.app.ensureAllLoaded();
       const addedNames = new Set([...s.selected.values()].map(it => it.n));
       const candidates = CONFIG.SHEETS.flatMap(sheet => (s.cache[sheet] || []).filter(it => it.role === "idol"))
-        .map(it => ({ it, key: Utils.normalizeText(it.n) }))
+        .flatMap(it => [it.n, ...(it.aliases || [])].map(name => ({ it, key: Utils.normalizeText(name) })))   // J列「別名」でも照合する
         .filter(c => c.key.length > 1)
         .sort((a, b) => b.key.length - a.key.length);
       candidates.forEach(({ it, key }) => {

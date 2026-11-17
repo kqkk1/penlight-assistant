@@ -1,0 +1,46 @@
+name: Release assets
+
+# GitHubでリリースを公開したら、そのバージョンの配布ファイルを自動で添付する
+#  - penlight-assistant-vX.Y.Z.zip           … 拡張機能（展開して「パッケージ化されていない拡張機能を読み込む」）
+#  - penlight-assistant-vX.Y.Z-bookmarklet.js … そのバージョンのブックマークレット用ファイル
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "添付し直すリリースのタグ（例: v4.5.0）"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  assets:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check version & prepare files
+        id: prep
+        run: node penlight-assistant/tools/prepare-release.js "$TAG" penlight-assistant/extension dist
+
+      - name: Zip extension
+        run: cd dist && zip -r "${{ steps.prep.outputs.name }}.zip" "${{ steps.prep.outputs.name }}"
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$TAG" \
+            "dist/${{ steps.prep.outputs.name }}.zip" \
+            "dist/${{ steps.prep.outputs.name }}-bookmarklet.js" \
+            --clobber

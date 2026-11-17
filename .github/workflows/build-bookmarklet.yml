@@ -13,6 +13,11 @@ on:
 permissions:
   contents: write
 
+# colors.json の自動生成と同時にpushしないようにする
+concurrency:
+  group: penlight-write
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -35,6 +40,7 @@ jobs:
             echo "変更なし"
           else
             git commit -m "build: ブックマークレット用 content.js を自動生成"
+            git pull --rebase
             git push
           fi
 

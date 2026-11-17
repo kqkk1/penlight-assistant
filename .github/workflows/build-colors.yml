@@ -1,0 +1,57 @@
+name: Build colors.json
+
+# 標準のスプレッドシートの内容を data/colors.json に書き出す（拡張機能・ブックマークレットは、このファイルを読む）
+#  - 3時間ごとに自動で実行（スプシを直したあと、すぐ反映したいときは Actions 画面から手動実行）
+#  - 読み取りの規則（config.js / data.js / utils.js）を変えたときも、作り直す
+on:
+  schedule:
+    - cron: '17 */3 * * *'
+  push:
+    branches: [main]
+    paths:
+      - "penlight-assistant/extension/config.js"
+      - "penlight-assistant/extension/data.js"
+      - "penlight-assistant/extension/utils.js"
+      - "penlight-assistant/tools/build-colors.js"
+  workflow_dispatch: # Actions画面から手動実行もできる
+
+permissions:
+  contents: write
+
+# ブックマークレットの自動生成と同時にpushしないようにする
+concurrency:
+  group: penlight-write
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build colors.json
+        run: node penlight-assistant/tools/build-colors.js penlight-assistant/extension penlight-assistant/data/colors.json
+
+      - name: Commit colors.json
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add penlight-assistant/data/colors.json
+          if git diff --cached --quiet; then
+            echo "変更なし"
+          else
+            git commit -m "data: colors.json をスプシから更新"
+            git pull --rebase
+            git push
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Purge jsDelivr cache
+        if: steps.commit.outputs.pushed == 'true'
+        # jsDelivr はブランチ指定のファイルをしばらくキャッシュするので、更新をすぐ反映させる
+        run: curl -fsS "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/penlight-assistant/data/colors.json" || true

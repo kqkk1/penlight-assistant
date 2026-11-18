@@ -2,7 +2,7 @@
  * Penlight Assistant - ブックマークレット用（自動生成ファイル）
  * ※このファイルは GitHub Actions が自動で作ります。直接編集しないでください。
  * 元ファイル: config.js, utils.js, grouper.js, data.js, site.js, styles.js, ui.js, main.js
- * version: 4.6.0 / build: 2026-11-17T20:45:10.767Z
+ * version: 4.7.0 / build: 2026-11-18T18:02:20.119Z
  */
 (() => {
 "use strict";
@@ -13,7 +13,7 @@
  * バージョン、スプシID、しきい値、56色名など。数値の調整はこのファイルだけで完結します。
  */
 
-const CURRENT_VERSION = "4.6.0";
+const CURRENT_VERSION = "4.7.0";
 
 const CONFIG = {
   GITHUB_REPO: "kqkk1/penlight-assistant",
@@ -21,8 +21,9 @@ const CONFIG = {
   // 標準のスプシの内容を GitHub Actions が書き出したファイル（tools/build-colors.js）。カスタムスプシIDのときは使わず、スプシを直接読む
   COLORS_URL: "https://cdn.jsdelivr.net/gh/kqkk1/penlight-assistant@main/penlight-assistant/data/colors.json",
   SHEETS: ["765AS", "ミリオン", "学マス", "デレマス", "シャニマス", "SideM", "876", "その他"],
-  KEYS: { FAV: "ps_fav_idols_v2", ID: "ps_custom_sheet_id", PEN: "ps_pen_mode", DUP: "ps_merge_dup", SORT: "ps_sort_mode", MERGE: "ps_merge_mode", STRENGTH: "ps_family_strength", BUNDLE: "ps_cache_colors" },
+  KEYS: { FAV: "ps_fav_idols_v2", ID: "ps_custom_sheet_id", PEN: "ps_pen_mode", DUP: "ps_merge_dup", SORT: "ps_sort_mode", MERGE: "ps_merge_mode", STRENGTH: "ps_family_strength", BUNDLE: "ps_cache_colors", QUEUE: "ps_saved_queue" },
   CACHE_EXPIRY: 24 * 60 * 60 * 1000,
+  QUEUE_EXPIRY: 12 * 60 * 60 * 1000, // 追加予定を、ページを開き直しても戻せる時間
   MAX_COLORS: 50,
   TITLE_MAX: 12, // 公式サイトのタイトル欄の文字数上限
   // 同系色まとめのしきい値（OKLab距離）。グループ内の全員がこの距離以内のときだけまとめる
@@ -30,6 +31,14 @@ const CONFIG = {
     "361": { weak: 0.04, medium: 0.09, strong: 0.12 },
     "56":  { weak: 0.06, medium: 0.10, strong: 0.15 }
   },
+  // まとめの選択肢（設定画面に左から並ぶ）。保存の形式は以前と同じ（mergeMode と familyStrength）
+  MERGE_OPTIONS: [
+    { id: "none",   mode: "none",   label: "なし",       hint: "まとめずに1人1色で登録します" },
+    { id: "exact",  mode: "exact",  label: "完全一致",   hint: "同じペンラコードの人を、連名で1色にまとめます" },
+    { id: "weak",   mode: "family", strength: "weak",   label: "同系色・弱" },
+    { id: "medium", mode: "family", strength: "medium", label: "同系色・中" },
+    { id: "strong", mode: "family", strength: "strong", label: "同系色・強" }
+  ],
   FAMILY_HINTS: {
     "361": {
       weak:   "ほぼ同じ色だけをまとめます（普段使いにおすすめ）",
@@ -328,6 +337,21 @@ class Store {
     localStorage.setItem(CONFIG.KEYS.FAV, JSON.stringify([...this.favorites]));
   }
   clearSelection() { this.selected.clear(); this.counter = 0; }
+  // 追加予定を保存しておく（ページの再読み込み・誤操作で消えても戻せるように）。中身は「ブランド:名前」と選んだ順だけ
+  saveSelection() {
+    try {
+      if (!this.selected.size) { localStorage.removeItem(CONFIG.KEYS.QUEUE); return; }
+      const keys = [...this.selected.values()].sort((a, b) => (a.selectOrder || 0) - (b.selectOrder || 0)).map(it => `${it.brand}:${it.n}`);
+      localStorage.setItem(CONFIG.KEYS.QUEUE, JSON.stringify({ t: Date.now(), keys }));
+    } catch (e) {}
+  }
+  loadSavedSelection() {
+    try {
+      const v = JSON.parse(localStorage.getItem(CONFIG.KEYS.QUEUE));
+      return v && Date.now() - v.t < CONFIG.QUEUE_EXPIRY && Array.isArray(v.keys) ? v.keys : [];
+    } catch (e) { return []; }
+  }
+  forgetSavedSelection() { localStorage.removeItem(CONFIG.KEYS.QUEUE); }
   reorderSelection(draggedKey, targetKey) {
     if (this.sortMode !== "select") return;
     const arr = [...this.selected.values()].sort((a, b) => (a.selectOrder || 0) - (b.selectOrder || 0));
@@ -424,7 +448,7 @@ class DataFetcher {
     DataFetcher.lastError = false;
     if (!localStorage.getItem(CONFIG.KEYS.ID)) {
       const bundle = await DataFetcher.loadBundle(force);
-      if (bundle) { DataFetcher.applySheetList(bundle.sheets); return bundle.items[sheetName] || []; }
+      if (bundle) { DataFetcher.applySheetList(bundle.sheets); DataFetcher.dataUpdatedAt = bundle.updatedAt || null; return bundle.items[sheetName] || []; }
       // colors.json が読めないときは、スプシを直接読む（従来の方法）
     }
     return DataFetcher.fetchSheet(sheetName, force);
@@ -582,6 +606,18 @@ const PS_STYLES = `
   .ps-segment input[type="radio"] { display:none; }
   .ps-segment input[type="radio"]:checked + span { color:#15161e; background:#7aa2f7; width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-weight:bold; }
   .ps-segment button.active { color:#15161e; background:#7aa2f7; font-weight:bold; }
+  .ps-merge { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); background:#1a1b26; border-radius:6px; border:1px solid #3b4261; overflow:hidden; }
+  .ps-merge button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:34px; padding:3px 2px; font-size:10px; line-height:1.15; cursor:pointer; color:#9aa5ce; background:transparent; border:none; border-right:1px solid #3b4261; transition:0.15s; }
+  .ps-merge button:last-child { border-right:none; }
+  .ps-merge button:hover { background:#24283b; color:#fff; }
+  .ps-merge button.active { color:#15161e; background:#7aa2f7; font-weight:bold; }
+  .ps-mlabel { white-space:nowrap; }
+  .ps-mcount { font-size:9px; opacity:0.85; font-weight:normal; }
+  .ps-mcount.over { color:#f7768e; opacity:1; }
+  .ps-merge button.active .ps-mcount.over { color:#8c1d2f; }
+  .ps-limit { margin-top:5px; padding:5px 6px; border-radius:4px; background:#2d202a; border:1px solid #f7768e; color:#f7a1b3; font-size:10px; line-height:1.5; }
+  .ps-limit .ps-btn { margin-left:4px; padding:2px 6px; font-size:10px; background:#7aa2f7; color:#15161e; font-weight:bold; }
+  #ps-run.over { background:#e0af68; color:#15161e; }
   .ps-opt-group { display:flex; align-items:center; gap:8px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #2f3549; }
   .ps-opt-group:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
   .ps-opt-lbl { font-size:10px; color:#8a93c0; width:40px; flex-shrink:0; text-align:right; font-weight:bold; }
@@ -671,7 +707,7 @@ const PS_STYLES = `
     .ps-group-head { padding: 8px 10px; font-size: 12px; }
     .ps-brand-head { font-size: 11px; padding: 8px 4px 4px; }
     
-    #ps-sa, #ps-ca { padding: 10px 16px !important; font-size: 13px !important; font-weight: bold !important; border-radius: 6px !important; }
+    #ps-sa, #ps-ca { padding: 6px 12px !important; font-size: 12px !important; font-weight: bold !important; border-radius: 6px !important; }
     #ps-sa { background: #3d59a1 !important; color: #fff !important; }
     #ps-ca { background: #2f3549 !important; color: #a9b1d6 !important; }
     
@@ -714,13 +750,44 @@ class UIManager {
     return true;
   }
 
+  // いまの「まとめ」の選択肢（CONFIG.MERGE_OPTIONS の1つ）
+  currentMergeOption() {
+    const s = this.store;
+    return CONFIG.MERGE_OPTIONS.find(o => o.mode === s.mergeMode && (o.mode !== "family" || o.strength === s.familyStrength)) || CONFIG.MERGE_OPTIONS[0];
+  }
+  applyMergeOption(opt) {
+    const s = this.store;
+    s.setPref("mergeMode", opt.mode, "MERGE");
+    if (opt.strength) s.setPref("familyStrength", opt.strength, "STRENGTH");
+    this.updateMergeUI(); this.renderQueue();
+  }
+  mergeHint(opt) {
+    if (opt.mode !== "family") return opt.hint;
+    return (CONFIG.FAMILY_HINTS[this.store.penMode === "56" ? "56" : "361"] || {})[opt.strength] || "";
+  }
+  // 選択肢ごとに、まとめた結果の色数を数える（設定画面のボタンと、上限を超えたときの案内に使う）
+  mergeCounts(sorted, rank) {
+    const s = this.store;
+    return CONFIG.MERGE_OPTIONS.map(opt => {
+      const v = Object.create(s);
+      v.mergeMode = opt.mode; if (opt.strength) v.familyStrength = opt.strength;
+      return { opt, count: ColorGrouper.build(sorted, v, rank).filter(g => g.pen !== "--").length };
+    });
+  }
+  // 上限に収まる、いちばん弱いまとめ方（今より強いものだけ）。なければ null
+  suggestMerge(counts) {
+    const cur = CONFIG.MERGE_OPTIONS.indexOf(this.currentMergeOption());
+    return counts.find((c, i) => i > cur && c.count <= CONFIG.MAX_COLORS) || null;
+  }
+
   updateMergeUI() {
-    const e = this.els, s = this.store;
-    e.mergeBtns.forEach(b => b.classList.toggle("active", b.dataset.merge === s.mergeMode));
-    e.strengthBtns.forEach(b => b.classList.toggle("active", b.dataset.strength === s.familyStrength));
-    e.familyPanel.style.display = s.mergeMode === "family" ? "flex" : "none";
-    const hints = CONFIG.FAMILY_HINTS[s.penMode === "56" ? "56" : "361"];
-    e.familyHint.textContent = hints[s.familyStrength] || "";
+    const e = this.els, cur = this.currentMergeOption();
+    // 説明はボタンに載せる（マウスを載せる・長押しで表示）。56色／361色で説明が変わるので、ここで毎回入れ直す
+    e.mergeBtns.forEach(b => {
+      const opt = CONFIG.MERGE_OPTIONS.find(o => o.id === b.dataset.mopt);
+      b.classList.toggle("active", opt === cur);
+      b.title = this.mergeHint(opt);
+    });
   }
 
   async checkUpdate() {
@@ -826,7 +893,7 @@ class UIManager {
       <div id="ps-m">
         <div id="ps-resize-handle" title="ドラッグしてサイズ変更"></div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #2f3549;flex-shrink:0;">
-          <b style="font-size:13px;color:#7aa2f7;">Penlight Assistant (for MIX PENLa PRO) v${CURRENT_VERSION}</b>
+          <b style="font-size:13px;color:#7aa2f7;" title="Penlight Assistant (for MIX PENLa PRO)">Penlight Assistant v${CURRENT_VERSION}</b>
           <div style="display:flex;gap:4px;">
             <button id="ps-toggle-opt" class="ps-btn" style="padding:2px 7px;">⚙設定</button>
             <button id="ps-minimize" class="ps-btn" style="padding:2px 8px;">ー</button>
@@ -834,13 +901,6 @@ class UIManager {
         </div>
         <div id="ps-body" style="display:flex;flex-direction:column;gap:6px;flex:1;overflow:hidden;">
           <div id="ps-opt-panel" style="display:none;background:#1f2335;border:1px solid #3b4261;border-radius:6px;padding:10px;flex-direction:column;flex-shrink:0;">
-            <div class="ps-opt-group">
-              <span class="ps-opt-lbl">カラー:</span>
-              <div class="ps-segment" style="width:140px;">
-                <label><input type="radio" name="ps-pen-mode" value="361" ${this.store.penMode==="361"?"checked":""}><span>361色</span></label>
-                <label><input type="radio" name="ps-pen-mode" value="56" ${this.store.penMode==="56"?"checked":""}><span>56色</span></label>
-              </div>
-            </div>
             <div class="ps-opt-group">
               <span class="ps-opt-lbl">並び:</span>
               <div class="ps-segment" style="flex:1;">
@@ -850,32 +910,31 @@ class UIManager {
               </div>
             </div>
             <div class="ps-opt-group">
-              <span class="ps-opt-lbl">表示:</span>
-              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:24px;">
-                ${[['brand','ブランド','#7aa2f7'],['staff','事務員','#9ece6a'],['unitcolor','ユニット','#ff9e64'],['variant','特殊色','#e0af68',true]].map(([id,lbl,col,uncheck]) => `<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:#a9b1d6;"><input type="checkbox" id="ps-toggle-${id}" ${uncheck?"":"checked"} style="accent-color:${col};">${lbl}</label>`).join("")}
+              <span class="ps-opt-lbl">一覧:</span>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:24px;" title="一覧に出す行">
+                ${[['brand','ブランド','#7aa2f7'],['staff','事務員','#9ece6a'],['unitcolor','ユニット','#ff9e64']].map(([id,lbl,col]) => `<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:#a9b1d6;"><input type="checkbox" id="ps-toggle-${id}" checked style="accent-color:${col};">${lbl}</label>`).join("")}
               </div>
             </div>
-            <div class="ps-opt-group" style="border-bottom:none;align-items:flex-start;">
-              <span class="ps-opt-lbl" style="line-height:24px;">まとめ:</span>
-              <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0;">
-                <div class="ps-segment">
-                  <button data-merge="none" title="まとめずに1人1色で登録します">なし</button>
-                  <button data-merge="exact" title="同じペンラコードを連名にして1つにまとめます">完全一致</button>
-                  <button data-merge="family" title="近い色をまとめて登録数を減らします">同系色</button>
+            <div class="ps-opt-group">
+              <span class="ps-opt-lbl">ペンラ:</span>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <div class="ps-segment" style="width:140px;">
+                  <label><input type="radio" name="ps-pen-mode" value="361" ${this.store.penMode==="361"?"checked":""}><span>361色</span></label>
+                  <label><input type="radio" name="ps-pen-mode" value="56" ${this.store.penMode==="56"?"checked":""}><span>56色</span></label>
                 </div>
-                <div id="ps-family-panel" style="display:none;flex-direction:column;gap:4px;">
-                  <div class="ps-segment">
-                    <button data-strength="weak">弱</button>
-                    <button data-strength="medium">中</button>
-                    <button data-strength="strong">強</button>
-                  </div>
-                  <div id="ps-family-hint" style="font-size:10px;color:#8a93c0;line-height:1.4;"></div>
-                </div>
+                <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:#a9b1d6;" title="スプシの特殊カラー（F〜H列）があるアイドルは、そちらの色で登録します"><input type="checkbox" id="ps-toggle-variant" ${this.store.showVariant?"checked":""} style="accent-color:#e0af68;">特殊色を使う</label>
+              </div>
+            </div>
+            <div class="ps-opt-group" style="border-bottom:none;">
+              <span class="ps-opt-lbl">まとめ:</span>
+              <div class="ps-merge" style="flex:1;min-width:0;">
+                ${CONFIG.MERGE_OPTIONS.map(o => `<button data-mopt="${o.id}"><span class="ps-mlabel">${o.label}</span><span class="ps-mcount" data-mcount="${o.id}">-</span></button>`).join("")}
               </div>
             </div>
             <div style="margin-top:2px;">
-              <div id="ps-opt-adv-toggle" style="cursor:pointer;font-size:10px;color:#8a93c0;text-align:center;padding:4px;background:#1a1b26;border-radius:4px;">▾ 詳細設定を開く (スプシID・抽出・読込/保存)</div>
+              <div id="ps-opt-adv-toggle" style="cursor:pointer;font-size:10px;color:#8a93c0;text-align:center;padding:4px;background:#1a1b26;border-radius:4px;">▾ その他（スプシID・抽出・読込/保存）</div>
               <div id="ps-opt-adv-panel" style="display:none;flex-direction:column;gap:4px;margin-top:6px;padding-top:6px;border-top:1px dashed #2f3549;">
+                <span id="ps-data-info" style="font-size:10px;color:#8a93c0;"></span>
                 <span style="font-size:10px;color:#9aa5ce;">カスタムスプレッドシートID:</span>
                 <div style="display:flex;gap:4px;"><input type="text" id="ps-sheet-id" class="ps-input" style="flex:1;" placeholder="空欄でデフォルト" value="${Utils.escapeHtml(customId)}"><button id="ps-sheet-save" class="ps-btn ps-btn-primary">適用</button></div>
                 <span style="font-size:10px;color:#9aa5ce;margin-top:6px;">リスト操作:</span>
@@ -892,17 +951,17 @@ class UIManager {
               <span id="ps-queue-toggle" style="font-size:11px;color:#7dcfff;cursor:pointer;">追加予定: <b id="ps-queue-count">0</b>名<span id="ps-queue-merged" style="margin-left:4px;font-size:10px;"></span> <span id="ps-queue-arrow">▾</span></span>
               <button id="ps-clear-queue" style="background:none;border:none;color:#f7768e;cursor:pointer;font-size:10px;margin-left:4px;">全クリア</button>
             </div>
+            <div id="ps-limit" class="ps-limit" style="display:none;"></div>
             <div id="ps-queue-list" style="display:none;flex-wrap:wrap;gap:4px;overflow-y:auto;margin-top:5px;padding-top:5px;border-top:1px dashed #2f3549;"></div>
           </div>
           <div style="display:flex;gap:4px;flex-shrink:0;">
             <select id="ps-b" class="ps-input" style="flex:1;min-width:0;">${this.brandOptionsHTML()}</select>
-            <input type="search" id="ps-search" class="ps-input" placeholder="全ブランドから検索" style="width:130px;">
+            <input type="search" id="ps-search" class="ps-input" placeholder="名前で検索" title="全ブランドから名前で検索" style="width:120px;">
             <button id="ps-reload" class="ps-btn" title="再取得・キャッシュクリア" style="padding:4px 8px;">↻</button>
           </div>
-          <div id="ps-unit-chips" style="display:none;flex-wrap:nowrap;overflow-x:auto;gap:4px;padding:2px 0;flex-shrink:0;"></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:0 2px;flex-shrink:0;">
-            <span style="font-size:10px;color:#8a93c0;">選択操作:</span>
-            <div style="display:flex;gap:4px;"><button id="ps-sa" class="ps-btn">全選択</button><button id="ps-ca" class="ps-btn">全解除</button></div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;min-height:22px;">
+            <div id="ps-unit-chips" style="display:none;flex:1;min-width:0;flex-wrap:nowrap;overflow-x:auto;gap:4px;padding:2px 0;"></div>
+            <div style="display:flex;gap:4px;margin-left:auto;flex-shrink:0;"><button id="ps-sa" class="ps-btn ps-sel-btn" title="表示中の一覧をすべて選ぶ">全選択</button><button id="ps-ca" class="ps-btn ps-sel-btn" title="表示中の一覧の選択を外す">全解除</button></div>
           </div>
           <div id="ps-l" style="flex:1;overflow-y:auto;background:#13141c;padding:4px;border-radius:4px;min-height:75px;">読込中...</div>
           <button id="ps-run" class="ps-btn ps-btn-primary" style="width:100%;">リストに追加する</button>
@@ -934,12 +993,11 @@ class UIManager {
       ext: get("ps-extract"), imp: get("ps-import"), exp: get("ps-export"),
       toggles: { brand: get("ps-toggle-brand"), staff: get("ps-toggle-staff"), uc: get("ps-toggle-unitcolor"), var: get("ps-toggle-variant") },
       radios: document.querySelectorAll('input[name="ps-pen-mode"]'),
-      mergeBtns: document.querySelectorAll("#ps-m [data-merge]"), strengthBtns: document.querySelectorAll("#ps-m [data-strength]"),
-      familyPanel: get("ps-family-panel"), familyHint: get("ps-family-hint"), qMerged: get("ps-queue-merged"),
+      mergeBtns: document.querySelectorAll("#ps-m [data-mopt]"), limit: get("ps-limit"), qMerged: get("ps-queue-merged"),
       sort: { select: get("ps-sort-select"), code: get("ps-sort-code"), preset: get("ps-sort-preset") },
       optBtn: get("ps-toggle-opt"), optPanel: get("ps-opt-panel"), advBtn: get("ps-opt-adv-toggle"), advPanel: get("ps-opt-adv-panel"),
       sid: get("ps-sheet-id"), save: get("ps-sheet-save"), qTog: get("ps-queue-toggle"), qArr: get("ps-queue-arrow"), chips: get("ps-unit-chips"),
-      sa: get("ps-sa"), ca: get("ps-ca")
+      sa: get("ps-sa"), ca: get("ps-ca"), dataInfo: get("ps-data-info")
     };
   }
 
@@ -958,7 +1016,7 @@ class UIManager {
     e.fab.onclick = () => { e.fab.style.display = "none"; e.m.style.display = "flex"; e.m.style.height = this.savedHeight || "750px"; };
     
     e.optBtn.onclick = () => { const show = e.optPanel.style.display === "flex"; e.optPanel.style.display = show ? "none" : "flex"; e.optBtn.style.color = show ? "#a9b1d6" : "#7aa2f7"; };
-    e.advBtn.onclick = () => { const show = e.advPanel.style.display === "flex"; e.advPanel.style.display = show ? "none" : "flex"; e.advBtn.textContent = show ? "▾ 詳細設定を開く (スプシID・抽出・読込/保存)" : "▴ 詳細設定を閉じる"; };
+    e.advBtn.onclick = () => { const show = e.advPanel.style.display === "flex"; e.advPanel.style.display = show ? "none" : "flex"; e.advBtn.textContent = show ? "▾ その他（スプシID・抽出・読込/保存）" : "▴ その他を閉じる"; };
     e.qTog.onclick = () => { this.isQueueOpen = !this.isQueueOpen; e.qList.style.display = this.isQueueOpen ? "flex" : "none"; e.qArr.textContent = this.isQueueOpen ? "▴" : "▾"; };
     
     Object.entries(e.sort).forEach(([mode, btn]) => {
@@ -969,8 +1027,8 @@ class UIManager {
     e.toggles.staff.onchange = ev => { s.showStaff = ev.target.checked; this.renderList(); };
     e.toggles.uc.onchange = ev => { s.showUnitColor = ev.target.checked; this.renderList(); };
     e.toggles.var.onchange = ev => { s.showVariant = ev.target.checked; this.renderQueue(); this.renderList(); };
-    e.mergeBtns.forEach(btn => btn.onclick = () => { s.setPref("mergeMode", btn.dataset.merge, "MERGE"); this.updateMergeUI(); this.renderQueue(); });
-    e.strengthBtns.forEach(btn => btn.onclick = () => { s.setPref("familyStrength", btn.dataset.strength, "STRENGTH"); this.updateMergeUI(); this.renderQueue(); });
+    e.mergeBtns.forEach(btn => btn.onclick = () => this.applyMergeOption(CONFIG.MERGE_OPTIONS.find(o => o.id === btn.dataset.mopt)));
+    e.limit.onclick = ev => { const id = ev.target.closest("[data-apply]")?.getAttribute("data-apply"); if (id) this.applyMergeOption(CONFIG.MERGE_OPTIONS.find(o => o.id === id)); };
     e.radios.forEach(r => r.onchange = ev => { if (ev.target.checked) { s.setPref("penMode", ev.target.value, "PEN"); this.updateMergeUI(); this.renderQueue(); this.renderList(); } });
     
     e.save.onclick = () => {
@@ -994,7 +1052,12 @@ class UIManager {
     e.reload.onclick = () => { DataFetcher.clearCache(); s.cache = {}; this.app.loadData(true); };
     e.sa.onclick = () => { s.getVisibleList().forEach(it => { const key = `${it.brand}:${it.n}`; if (!s.selected.has(key)) s.selected.set(key, { ...it, selectOrder: ++s.counter }); }); this.renderQueue(); this.renderList(); };
     e.ca.onclick = () => { (s.searchQuery ? s.getVisibleList() : (s.cache[s.currentBrand] || [])).forEach(it => s.selected.delete(`${it.brand}:${it.n}`)); this.renderQueue(); this.renderList(); };
-    e.clear.onclick = () => { s.clearSelection(); this.renderQueue(); this.renderList(); };
+    e.clear.onclick = async () => {
+      if (!s.selected.size) return;
+      // 抽出したリストを誤タップで消さないよう、ある程度の人数なら確認する
+      if (s.selected.size >= 5 && !(await this.openModal({ title: "追加予定を全クリア", message: `追加予定の${s.selected.size}名をすべて外します。よろしいですか？`, okText: "全クリア" }))) return;
+      s.clearSelection(); this.renderQueue(); this.renderList();
+    };
 
     e.list.onclick = ev => {
       const fav = ev.target.closest(".ps-star-btn");
@@ -1164,8 +1227,13 @@ class UIManager {
 
   renderQueue() {
     const e = this.els, s = this.store;
+    if (this.queueReady) s.saveSelection();   // 起動時の復元が終わるまでは保存しない（前回の分を空で上書きしないため）
     e.qCount.textContent = s.selected.size;
-    if (!s.selected.size) { e.qMerged.textContent = ""; e.qList.innerHTML = `<span style="color:#8a93c0;font-size:10px;">未選択</span>`; return; }
+    if (!s.selected.size) {
+      e.qMerged.textContent = ""; e.qList.innerHTML = `<span style="color:#8a93c0;font-size:10px;">未選択</span>`;
+      e.limit.style.display = "none"; this.renderMergeCounts(null); this.updateRunLabel(0, 0);
+      return;
+    }
     const rank = this.site.getRankCalculator();
     const sorted = s.getSortedSelectedList(rank);
     const groups = ColorGrouper.build(sorted, s, rank);
@@ -1174,6 +1242,18 @@ class UIManager {
     const colorCount = groups.filter(g => g.pen !== "--").length, max = CONFIG.MAX_COLORS;
     e.qMerged.textContent = `→ ${colorCount}色 / ${max}`;
     e.qMerged.style.color = colorCount > max ? "#f7768e" : colorCount > max - 5 ? "#e0af68" : "#9ece6a";
+
+    // 選択肢ごとの色数（設定画面のボタンに表示）と、上限を超えたときの案内
+    const counts = this.mergeCounts(sorted, rank);
+    this.renderMergeCounts(counts);
+    if (colorCount > max) {
+      const sug = this.suggestMerge(counts);
+      e.limit.style.display = "block";
+      e.limit.innerHTML = sug
+        ? `⚠️ ${max}色を超えています。<button class="ps-btn" data-apply="${sug.opt.id}">「${sug.opt.label}」でまとめる（${sug.count}色）</button>`
+        : `⚠️ ${max}色を超えています。まとめても収まらないので、選択を減らしてください。`;
+    } else e.limit.style.display = "none";
+    this.updateRunLabel(colorCount, sorted.filter(it => s.getActivePen(it) !== "--").length);
 
     const merged = s.mergeMode !== "none";
     const canDrag = s.sortMode === "select" && !merged;
@@ -1201,6 +1281,33 @@ class UIManager {
         ${open ? `<div class="ps-group-body">${g.members.map(m => badge(m, false)).join("")}</div>` : ""}
       </div>`;
     }).join("");
+  }
+
+  // 設定画面の「まとめ」の各ボタンに、まとめた結果の色数を出す（未選択なら「-」）
+  renderMergeCounts(counts) {
+    this.els.m.querySelectorAll("[data-mcount]").forEach(el => {
+      const c = counts?.find(x => x.opt.id === el.dataset.mcount);
+      el.textContent = c ? `${c.count}色` : "-";
+      el.classList.toggle("over", !!c && c.count > CONFIG.MAX_COLORS);
+    });
+  }
+
+  // 実行ボタンに、登録される色数を出す（まとめて人数と違うときは人数も）
+  updateRunLabel(colorCount, people) {
+    if (this.app.running) return;
+    const run = this.els.run, over = colorCount > CONFIG.MAX_COLORS;
+    run.classList.toggle("over", over);
+    run.textContent = !colorCount ? "リストに追加する"
+      : over ? `${colorCount}色（上限${CONFIG.MAX_COLORS}色を超えています）`
+      : `${colorCount}色をリストに追加${people !== colorCount ? `（${people}名）` : ""}`;
+  }
+
+  // 「その他」に、いま使っているカラーデータの種類と更新日時を出す（問い合わせ・確認用）
+  updateDataInfo() {
+    const el = this.els.dataInfo; if (!el) return;
+    if (localStorage.getItem(CONFIG.KEYS.ID)) { el.textContent = "カラーデータ: カスタムのスプレッドシートから読込中"; return; }
+    const d = DataFetcher.dataUpdatedAt ? new Date(DataFetcher.dataUpdatedAt) : null;
+    el.textContent = d && !isNaN(d) ? `カラーデータ: ${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")} 更新` : "カラーデータ: スプレッドシートから直接読込中";
   }
 
   renderUnitChips() {
@@ -1251,8 +1358,10 @@ class App {
       this.siteAdapter.startObserving();
       this.ui.renderQueue();
       await this.loadData();
-      // ★ 起動時にURLパラメータ（?auto_cast=... や &special=1）があれば自動実行
-      await this.checkUrlAutoExtract();
+      // ★ 起動時にURLパラメータ（?auto_cast=... や &special=1）があれば自動実行。なければ、前回の追加予定を戻す
+      const fromUrl = await this.checkUrlAutoExtract();
+      if (!fromUrl) await this.restoreSelection();
+      this.ui.queueReady = true; this.ui.renderQueue();
     }
   }
   async loadData(force = false) {
@@ -1267,7 +1376,7 @@ class App {
         if (this.store.currentBrand !== before) this.store.cache[this.store.currentBrand] = await DataFetcher.fetch(this.store.currentBrand, false);
       }
     }
-    this.ui.renderUnitChips(); this.ui.renderList();
+    this.ui.renderUnitChips(); this.ui.renderList(); this.ui.updateDataInfo();
     if (DataFetcher.lastError && !this.store.cache[this.store.currentBrand]?.length) {
       this.store.cache[this.store.currentBrand] = null; // 次回また取得を試みる
       this.ui.els.list.innerHTML = `<span style="color:#f7768e;display:block;padding:6px 0;">データを取得できませんでした。通信状況を確認して ↻ で再試行してください。</span>`;
@@ -1282,6 +1391,17 @@ class App {
     }
     return this._allLoading;
   }
+  // 前回（12時間以内）の追加予定を戻す。カラーデータは最新のものを使う
+  async restoreSelection() {
+    const keys = this.store.loadSavedSelection();
+    if (!keys.length) return;
+    await this.ensureAllLoaded();
+    let restored = 0;
+    keys.forEach(key => { const it = this.store.findItem(key); if (it && !this.store.selected.has(key)) { this.store.selected.set(key, { ...it, selectOrder: ++this.store.counter }); restored++; } });
+    if (!restored) return;
+    this.ui.renderQueue(); this.ui.renderList();
+    this.ui.showToast(`前回の追加予定（${restored}名）を戻しました。\n不要なら「全クリア」で消せます。`);
+  }
   // ★ NotionからのURLパラメータ（?auto_cast=... および &special=1）を受け取り、特殊色トグルON＆自動抽出を実行する処理
   async checkUrlAutoExtract() {
     try {
@@ -1289,7 +1409,7 @@ class App {
       const castParam = urlObj.searchParams.get("auto_cast") || urlObj.searchParams.get("cast");
       const isSpecial = urlObj.searchParams.get("special") === "1" || urlObj.searchParams.get("special") === "true";
 
-      if (!castParam && !isSpecial) return;
+      if (!castParam && !isSpecial) return false;
 
       // リロード時に二重実行されないよう、アドレスバーからパラメータを消去
       urlObj.searchParams.delete("auto_cast");
@@ -1307,13 +1427,17 @@ class App {
         this.ui.renderList();
       }
 
-      if (!castParam) return;
+      if (!castParam) return false;
 
       // 2. 抽出処理を直接実行（モーダルを経由しないので待ち時間に左右されない）
+      //    別のライブのURLから来たので、前回の追加予定は戻さない
+      this.store.forgetSavedSelection();
       await this.ui.extractFromText(castParam);
+      return true;
     } catch (e) {
       console.error("Penlight Assistant: Auto extract failed", e);
     }
+    return false;
   }
   async executeAutoAdd() {
     const rank = this.siteAdapter.getRankCalculator();
@@ -1324,11 +1448,8 @@ class App {
     const pTargets = ColorGrouper.build(targets, this.store, rank);
     const validCount = pTargets.filter(g => g.pen !== "--").length;
     if (validCount > CONFIG.MAX_COLORS) {
-      const s = this.store;
-      const tip = s.mergeMode === "none" ? "設定の「まとめ」を「完全一致」または「同系色」にすると、上限に収まる場合があります。"
-        : s.mergeMode === "exact" ? "設定の「まとめ」を「同系色」にすると、近い色が1色にまとまり上限に収まる場合があります。"
-        : s.familyStrength !== "strong" ? "同系色の強さを上げると、さらにまとまり上限に収まる場合があります。"
-        : "選択メンバーを減らしてください。";
+      const sug = this.ui.suggestMerge(this.ui.mergeCounts(targets, rank));
+      const tip = sug ? `設定の「まとめ」を「${sug.opt.label}」にすると、${sug.count}色になり上限に収まります。` : "まとめても上限に収まらないので、選択メンバーを減らしてください。";
       await this.ui.openModal({
         title: "⚠️ 登録上限オーバー",
         message: `一度に登録できるのは「${CONFIG.MAX_COLORS}色」までです。\n（現在: ${validCount}色 追加予定）\n\n※${tip}`,
@@ -1338,11 +1459,24 @@ class App {
       return;
     }
 
-    // 登録前の確認（まとめると情報が減るので、実際に登録される内容を見せる）
-    const lines = pTargets.map(g => g.pen === "--" ? `・${g.n}（コード未設定のためスキップ）` : `・${g.n}（${g.pen}${g.members.length > 1 ? `／${g.members.length}名` : ""}）`);
+    // 公式サイトのカラーボタンが1つも見つからないときは、始めずに知らせる（読み込み途中・サイトの仕様変更）
+    if (!this.siteAdapter.btnCache.size) {
+      await this.ui.openModal({
+        title: "カラーボタンが見つかりません",
+        message: "公式サイトのペンライトのカラーボタンが見つかりませんでした。\n\nページの読み込みが終わってから、もう一度押してください。\n何度やっても同じ場合は、公式サイトの仕様が変わった可能性があります。",
+        hideCancel: true
+      });
+      this.ui.els.run.disabled = false;
+      return;
+    }
+
+    // 登録前の確認（まとめると情報が減るので、実際に登録される内容を見せる）。ボタンが見つからないコードも先に知らせる
+    const noBtn = g => g.pen !== "--" && !this.siteAdapter.getButton(g.pen);
+    const lines = pTargets.map(g => g.pen === "--" ? `・${g.n}（コード未設定のためスキップ）` : noBtn(g) ? `・${g.n}（${g.pen}：公式サイトにボタンがないためスキップ）` : `・${g.n}（${g.pen}${g.members.length > 1 ? `／${g.members.length}名` : ""}）`);
+    const addCount = pTargets.filter(g => g.pen !== "--" && !noBtn(g)).length;
     const ok = await this.ui.openModal({
       title: "登録内容の確認",
-      message: `以下の${validCount}色を公式サイトに追加します。\n\n${lines.join("\n")}`,
+      message: `以下の${addCount}色を公式サイトに追加します。\n\n${lines.join("\n")}`,
       okText: "登録する"
     });
     if (!ok) { this.ui.els.run.disabled = false; return; }
@@ -1407,7 +1541,11 @@ class App {
     }
     // スマホではパネルが画面を覆うので、完了後は自動で縮めて公式サイトの結果を見せる
     if (!aborted && window.matchMedia?.("(max-width: 768px)").matches) this.ui.els.min.click();
-    setTimeout(() => { if (!this.running) this.ui.els.run.textContent = "リストに追加する"; }, 2000);
+    setTimeout(() => {
+      if (this.running) return;
+      this.ui.renderQueue();   // 実行ボタンの表示を、登録される色数に戻す
+      if (!aborted && count) this.store.forgetSavedSelection();   // 登録が終わった分は、次に開いたときに戻さない
+    }, 2000);
   }
 }
 

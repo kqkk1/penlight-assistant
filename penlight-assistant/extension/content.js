@@ -2,7 +2,7 @@
  * Penlight Assistant - ブックマークレット用（自動生成ファイル）
  * ※このファイルは GitHub Actions が自動で作ります。直接編集しないでください。
  * 元ファイル: config.js, utils.js, grouper.js, data.js, site.js, styles.js, ui.js, main.js
- * version: 4.7.0 / build: 2026-11-18T18:02:20.119Z
+ * version: 4.7.0 / build: 2026-11-18T18:09:31.118Z
  */
 (() => {
 "use strict";
@@ -13,7 +13,7 @@
  * バージョン、スプシID、しきい値、56色名など。数値の調整はこのファイルだけで完結します。
  */
 
-const CURRENT_VERSION = "4.7.0";
+const CURRENT_VERSION = "4.6.0";
 
 const CONFIG = {
   GITHUB_REPO: "kqkk1/penlight-assistant",

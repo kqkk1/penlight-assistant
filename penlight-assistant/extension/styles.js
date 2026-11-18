@@ -33,6 +33,18 @@ const PS_STYLES = `
   .ps-segment input[type="radio"] { display:none; }
   .ps-segment input[type="radio"]:checked + span { color:#15161e; background:#7aa2f7; width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-weight:bold; }
   .ps-segment button.active { color:#15161e; background:#7aa2f7; font-weight:bold; }
+  .ps-merge { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); background:#1a1b26; border-radius:6px; border:1px solid #3b4261; overflow:hidden; }
+  .ps-merge button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:34px; padding:3px 2px; font-size:10px; line-height:1.15; cursor:pointer; color:#9aa5ce; background:transparent; border:none; border-right:1px solid #3b4261; transition:0.15s; }
+  .ps-merge button:last-child { border-right:none; }
+  .ps-merge button:hover { background:#24283b; color:#fff; }
+  .ps-merge button.active { color:#15161e; background:#7aa2f7; font-weight:bold; }
+  .ps-mlabel { white-space:nowrap; }
+  .ps-mcount { font-size:9px; opacity:0.85; font-weight:normal; }
+  .ps-mcount.over { color:#f7768e; opacity:1; }
+  .ps-merge button.active .ps-mcount.over { color:#8c1d2f; }
+  .ps-limit { margin-top:5px; padding:5px 6px; border-radius:4px; background:#2d202a; border:1px solid #f7768e; color:#f7a1b3; font-size:10px; line-height:1.5; }
+  .ps-limit .ps-btn { margin-left:4px; padding:2px 6px; font-size:10px; background:#7aa2f7; color:#15161e; font-weight:bold; }
+  #ps-run.over { background:#e0af68; color:#15161e; }
   .ps-opt-group { display:flex; align-items:center; gap:8px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #2f3549; }
   .ps-opt-group:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
   .ps-opt-lbl { font-size:10px; color:#8a93c0; width:40px; flex-shrink:0; text-align:right; font-weight:bold; }
@@ -122,7 +134,7 @@ const PS_STYLES = `
     .ps-group-head { padding: 8px 10px; font-size: 12px; }
     .ps-brand-head { font-size: 11px; padding: 8px 4px 4px; }
     
-    #ps-sa, #ps-ca { padding: 10px 16px !important; font-size: 13px !important; font-weight: bold !important; border-radius: 6px !important; }
+    #ps-sa, #ps-ca { padding: 6px 12px !important; font-size: 12px !important; font-weight: bold !important; border-radius: 6px !important; }
     #ps-sa { background: #3d59a1 !important; color: #fff !important; }
     #ps-ca { background: #2f3549 !important; color: #a9b1d6 !important; }
     

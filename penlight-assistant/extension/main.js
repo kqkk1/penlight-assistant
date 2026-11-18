@@ -16,8 +16,10 @@ class App {
       this.siteAdapter.startObserving();
       this.ui.renderQueue();
       await this.loadData();
-      // ★ 起動時にURLパラメータ（?auto_cast=... や &special=1）があれば自動実行
-      await this.checkUrlAutoExtract();
+      // ★ 起動時にURLパラメータ（?auto_cast=... や &special=1）があれば自動実行。なければ、前回の追加予定を戻す
+      const fromUrl = await this.checkUrlAutoExtract();
+      if (!fromUrl) await this.restoreSelection();
+      this.ui.queueReady = true; this.ui.renderQueue();
     }
   }
   async loadData(force = false) {
@@ -32,7 +34,7 @@ class App {
         if (this.store.currentBrand !== before) this.store.cache[this.store.currentBrand] = await DataFetcher.fetch(this.store.currentBrand, false);
       }
     }
-    this.ui.renderUnitChips(); this.ui.renderList();
+    this.ui.renderUnitChips(); this.ui.renderList(); this.ui.updateDataInfo();
     if (DataFetcher.lastError && !this.store.cache[this.store.currentBrand]?.length) {
       this.store.cache[this.store.currentBrand] = null; // 次回また取得を試みる
       this.ui.els.list.innerHTML = `<span style="color:#f7768e;display:block;padding:6px 0;">データを取得できませんでした。通信状況を確認して ↻ で再試行してください。</span>`;
@@ -47,6 +49,17 @@ class App {
     }
     return this._allLoading;
   }
+  // 前回（12時間以内）の追加予定を戻す。カラーデータは最新のものを使う
+  async restoreSelection() {
+    const keys = this.store.loadSavedSelection();
+    if (!keys.length) return;
+    await this.ensureAllLoaded();
+    let restored = 0;
+    keys.forEach(key => { const it = this.store.findItem(key); if (it && !this.store.selected.has(key)) { this.store.selected.set(key, { ...it, selectOrder: ++this.store.counter }); restored++; } });
+    if (!restored) return;
+    this.ui.renderQueue(); this.ui.renderList();
+    this.ui.showToast(`前回の追加予定（${restored}名）を戻しました。\n不要なら「全クリア」で消せます。`);
+  }
   // ★ NotionからのURLパラメータ（?auto_cast=... および &special=1）を受け取り、特殊色トグルON＆自動抽出を実行する処理
   async checkUrlAutoExtract() {
     try {
@@ -54,7 +67,7 @@ class App {
       const castParam = urlObj.searchParams.get("auto_cast") || urlObj.searchParams.get("cast");
       const isSpecial = urlObj.searchParams.get("special") === "1" || urlObj.searchParams.get("special") === "true";
 
-      if (!castParam && !isSpecial) return;
+      if (!castParam && !isSpecial) return false;
 
       // リロード時に二重実行されないよう、アドレスバーからパラメータを消去
       urlObj.searchParams.delete("auto_cast");
@@ -72,13 +85,17 @@ class App {
         this.ui.renderList();
       }
 
-      if (!castParam) return;
+      if (!castParam) return false;
 
       // 2. 抽出処理を直接実行（モーダルを経由しないので待ち時間に左右されない）
+      //    別のライブのURLから来たので、前回の追加予定は戻さない
+      this.store.forgetSavedSelection();
       await this.ui.extractFromText(castParam);
+      return true;
     } catch (e) {
       console.error("Penlight Assistant: Auto extract failed", e);
     }
+    return false;
   }
   async executeAutoAdd() {
     const rank = this.siteAdapter.getRankCalculator();
@@ -89,11 +106,8 @@ class App {
     const pTargets = ColorGrouper.build(targets, this.store, rank);
     const validCount = pTargets.filter(g => g.pen !== "--").length;
     if (validCount > CONFIG.MAX_COLORS) {
-      const s = this.store;
-      const tip = s.mergeMode === "none" ? "設定の「まとめ」を「完全一致」または「同系色」にすると、上限に収まる場合があります。"
-        : s.mergeMode === "exact" ? "設定の「まとめ」を「同系色」にすると、近い色が1色にまとまり上限に収まる場合があります。"
-        : s.familyStrength !== "strong" ? "同系色の強さを上げると、さらにまとまり上限に収まる場合があります。"
-        : "選択メンバーを減らしてください。";
+      const sug = this.ui.suggestMerge(this.ui.mergeCounts(targets, rank));
+      const tip = sug ? `設定の「まとめ」を「${sug.opt.label}」にすると、${sug.count}色になり上限に収まります。` : "まとめても上限に収まらないので、選択メンバーを減らしてください。";
       await this.ui.openModal({
         title: "⚠️ 登録上限オーバー",
         message: `一度に登録できるのは「${CONFIG.MAX_COLORS}色」までです。\n（現在: ${validCount}色 追加予定）\n\n※${tip}`,
@@ -103,11 +117,24 @@ class App {
       return;
     }
 
-    // 登録前の確認（まとめると情報が減るので、実際に登録される内容を見せる）
-    const lines = pTargets.map(g => g.pen === "--" ? `・${g.n}（コード未設定のためスキップ）` : `・${g.n}（${g.pen}${g.members.length > 1 ? `／${g.members.length}名` : ""}）`);
+    // 公式サイトのカラーボタンが1つも見つからないときは、始めずに知らせる（読み込み途中・サイトの仕様変更）
+    if (!this.siteAdapter.btnCache.size) {
+      await this.ui.openModal({
+        title: "カラーボタンが見つかりません",
+        message: "公式サイトのペンライトのカラーボタンが見つかりませんでした。\n\nページの読み込みが終わってから、もう一度押してください。\n何度やっても同じ場合は、公式サイトの仕様が変わった可能性があります。",
+        hideCancel: true
+      });
+      this.ui.els.run.disabled = false;
+      return;
+    }
+
+    // 登録前の確認（まとめると情報が減るので、実際に登録される内容を見せる）。ボタンが見つからないコードも先に知らせる
+    const noBtn = g => g.pen !== "--" && !this.siteAdapter.getButton(g.pen);
+    const lines = pTargets.map(g => g.pen === "--" ? `・${g.n}（コード未設定のためスキップ）` : noBtn(g) ? `・${g.n}（${g.pen}：公式サイトにボタンがないためスキップ）` : `・${g.n}（${g.pen}${g.members.length > 1 ? `／${g.members.length}名` : ""}）`);
+    const addCount = pTargets.filter(g => g.pen !== "--" && !noBtn(g)).length;
     const ok = await this.ui.openModal({
       title: "登録内容の確認",
-      message: `以下の${validCount}色を公式サイトに追加します。\n\n${lines.join("\n")}`,
+      message: `以下の${addCount}色を公式サイトに追加します。\n\n${lines.join("\n")}`,
       okText: "登録する"
     });
     if (!ok) { this.ui.els.run.disabled = false; return; }
@@ -172,7 +199,11 @@ class App {
     }
     // スマホではパネルが画面を覆うので、完了後は自動で縮めて公式サイトの結果を見せる
     if (!aborted && window.matchMedia?.("(max-width: 768px)").matches) this.ui.els.min.click();
-    setTimeout(() => { if (!this.running) this.ui.els.run.textContent = "リストに追加する"; }, 2000);
+    setTimeout(() => {
+      if (this.running) return;
+      this.ui.renderQueue();   // 実行ボタンの表示を、登録される色数に戻す
+      if (!aborted && count) this.store.forgetSavedSelection();   // 登録が終わった分は、次に開いたときに戻さない
+    }, 2000);
   }
 }
 

@@ -5,7 +5,7 @@
  */
 "use strict";
 
-const CURRENT_VERSION = "4.6.0";
+const CURRENT_VERSION = "4.7.0";
 
 const CONFIG = {
   GITHUB_REPO: "kqkk1/penlight-assistant",
@@ -13,8 +13,9 @@ const CONFIG = {
   // 標準のスプシの内容を GitHub Actions が書き出したファイル（tools/build-colors.js）。カスタムスプシIDのときは使わず、スプシを直接読む
   COLORS_URL: "https://cdn.jsdelivr.net/gh/kqkk1/penlight-assistant@main/penlight-assistant/data/colors.json",
   SHEETS: ["765AS", "ミリオン", "学マス", "デレマス", "シャニマス", "SideM", "876", "その他"],
-  KEYS: { FAV: "ps_fav_idols_v2", ID: "ps_custom_sheet_id", PEN: "ps_pen_mode", DUP: "ps_merge_dup", SORT: "ps_sort_mode", MERGE: "ps_merge_mode", STRENGTH: "ps_family_strength", BUNDLE: "ps_cache_colors" },
+  KEYS: { FAV: "ps_fav_idols_v2", ID: "ps_custom_sheet_id", PEN: "ps_pen_mode", DUP: "ps_merge_dup", SORT: "ps_sort_mode", MERGE: "ps_merge_mode", STRENGTH: "ps_family_strength", BUNDLE: "ps_cache_colors", QUEUE: "ps_saved_queue" },
   CACHE_EXPIRY: 24 * 60 * 60 * 1000,
+  QUEUE_EXPIRY: 12 * 60 * 60 * 1000, // 追加予定を、ページを開き直しても戻せる時間
   MAX_COLORS: 50,
   TITLE_MAX: 12, // 公式サイトのタイトル欄の文字数上限
   // 同系色まとめのしきい値（OKLab距離）。グループ内の全員がこの距離以内のときだけまとめる
@@ -22,6 +23,14 @@ const CONFIG = {
     "361": { weak: 0.04, medium: 0.09, strong: 0.12 },
     "56":  { weak: 0.06, medium: 0.10, strong: 0.15 }
   },
+  // まとめの選択肢（設定画面に左から並ぶ）。保存の形式は以前と同じ（mergeMode と familyStrength）
+  MERGE_OPTIONS: [
+    { id: "none",   mode: "none",   label: "なし",       hint: "まとめずに1人1色で登録します" },
+    { id: "exact",  mode: "exact",  label: "完全一致",   hint: "同じペンラコードの人を、連名で1色にまとめます" },
+    { id: "weak",   mode: "family", strength: "weak",   label: "同系色・弱" },
+    { id: "medium", mode: "family", strength: "medium", label: "同系色・中" },
+    { id: "strong", mode: "family", strength: "strong", label: "同系色・強" }
+  ],
   FAMILY_HINTS: {
     "361": {
       weak:   "ほぼ同じ色だけをまとめます（普段使いにおすすめ）",

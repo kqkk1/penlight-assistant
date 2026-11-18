@@ -40,6 +40,21 @@ class Store {
     localStorage.setItem(CONFIG.KEYS.FAV, JSON.stringify([...this.favorites]));
   }
   clearSelection() { this.selected.clear(); this.counter = 0; }
+  // 追加予定を保存しておく（ページの再読み込み・誤操作で消えても戻せるように）。中身は「ブランド:名前」と選んだ順だけ
+  saveSelection() {
+    try {
+      if (!this.selected.size) { localStorage.removeItem(CONFIG.KEYS.QUEUE); return; }
+      const keys = [...this.selected.values()].sort((a, b) => (a.selectOrder || 0) - (b.selectOrder || 0)).map(it => `${it.brand}:${it.n}`);
+      localStorage.setItem(CONFIG.KEYS.QUEUE, JSON.stringify({ t: Date.now(), keys }));
+    } catch (e) {}
+  }
+  loadSavedSelection() {
+    try {
+      const v = JSON.parse(localStorage.getItem(CONFIG.KEYS.QUEUE));
+      return v && Date.now() - v.t < CONFIG.QUEUE_EXPIRY && Array.isArray(v.keys) ? v.keys : [];
+    } catch (e) { return []; }
+  }
+  forgetSavedSelection() { localStorage.removeItem(CONFIG.KEYS.QUEUE); }
   reorderSelection(draggedKey, targetKey) {
     if (this.sortMode !== "select") return;
     const arr = [...this.selected.values()].sort((a, b) => (a.selectOrder || 0) - (b.selectOrder || 0));
@@ -136,7 +151,7 @@ class DataFetcher {
     DataFetcher.lastError = false;
     if (!localStorage.getItem(CONFIG.KEYS.ID)) {
       const bundle = await DataFetcher.loadBundle(force);
-      if (bundle) { DataFetcher.applySheetList(bundle.sheets); return bundle.items[sheetName] || []; }
+      if (bundle) { DataFetcher.applySheetList(bundle.sheets); DataFetcher.dataUpdatedAt = bundle.updatedAt || null; return bundle.items[sheetName] || []; }
       // colors.json が読めないときは、スプシを直接読む（従来の方法）
     }
     return DataFetcher.fetchSheet(sheetName, force);

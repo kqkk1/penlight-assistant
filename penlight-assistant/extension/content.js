@@ -2,7 +2,7 @@
  * Penlight Assistant - ブックマークレット用（自動生成ファイル）
  * ※このファイルは GitHub Actions が自動で作ります。直接編集しないでください。
  * 元ファイル: config.js, utils.js, grouper.js, data.js, site.js, styles.js, ui.js, main.js
- * version: 4.6.0 / build: 2026-11-18T18:10:19.325Z
+ * version: 4.6.1 / build: 2026-11-21T10:14:27.206Z
  */
 (() => {
 "use strict";
@@ -13,7 +13,7 @@
  * バージョン、スプシID、しきい値、56色名など。数値の調整はこのファイルだけで完結します。
  */
 
-const CURRENT_VERSION = "4.6.0";
+const CURRENT_VERSION = "4.6.1";
 
 const CONFIG = {
   GITHUB_REPO: "kqkk1/penlight-assistant",
@@ -21,7 +21,7 @@ const CONFIG = {
   // 標準のスプシの内容を GitHub Actions が書き出したファイル（tools/build-colors.js）。カスタムスプシIDのときは使わず、スプシを直接読む
   COLORS_URL: "https://cdn.jsdelivr.net/gh/kqkk1/penlight-assistant@main/penlight-assistant/data/colors.json",
   SHEETS: ["765AS", "ミリオン", "学マス", "デレマス", "シャニマス", "SideM", "876", "その他"],
-  KEYS: { FAV: "ps_fav_idols_v2", ID: "ps_custom_sheet_id", PEN: "ps_pen_mode", DUP: "ps_merge_dup", SORT: "ps_sort_mode", MERGE: "ps_merge_mode", STRENGTH: "ps_family_strength", BUNDLE: "ps_cache_colors", QUEUE: "ps_saved_queue" },
+  KEYS: { FAV: "ps_fav_idols_v2", ID: "ps_custom_sheet_id", PEN: "ps_pen_mode", DUP: "ps_merge_dup", SORT: "ps_sort_mode", MERGE: "ps_merge_mode", STRENGTH: "ps_family_strength", BUNDLE: "ps_cache_colors", QUEUE: "ps_saved_queue", THEME: "ps_theme" },
   CACHE_EXPIRY: 24 * 60 * 60 * 1000,
   QUEUE_EXPIRY: 12 * 60 * 60 * 1000, // 追加予定を、ページを開き直しても戻せる時間
   MAX_COLORS: 50,
@@ -457,7 +457,7 @@ class DataFetcher {
   // colors.json の取得（同時に呼ばれても1回だけ取りに行く）。取れなければ、期限切れでも前回のものを使う。どちらもなければ null
   static loadBundle(force = false) {
     if (!force && DataFetcher._bundle) return Promise.resolve(DataFetcher._bundle);
-    if (!force && DataFetcher._bundleFailed) return Promise.resolve(null);   // この画面で一度失敗したら、↻ を押すまでスプシ直読みで動かす
+    if (!force && DataFetcher._bundleFailed) return Promise.resolve(null);   // この画面で一度失敗したら、再読み込みボタンを押すまでスプシ直読みで動かす
     if (DataFetcher._bundleLoading) return DataFetcher._bundleLoading;
     DataFetcher._bundleLoading = (async () => {
       let cached = null;
@@ -575,158 +575,266 @@ class SiteAdapter {
 /**
  * Penlight Assistant (for MIX PENLa PRO) - styles.js
  * パネルの見た目（CSS）
- * 色・サイズ・スマホ用レイアウトの調整はこのファイルだけで完結します。
+ * 色はすべて一番上の変数で管理しています（ダーク／ライト）。ライブ情報ポータルと同じ配色です。
+ * サイズ・スマホ用レイアウトの調整もこのファイルだけで完結します。
  */
 
 const PS_STYLES = `
-  #ps-m { position:fixed; top:18px; right:18px; width:500px; height:750px; min-width:280px; min-height:240px; max-width:95vw; max-height:94vh; background:#1a1b26; color:#c0caf5; border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.85); z-index:999999999; padding:12px; display:flex; flex-direction:column; font-family:-apple-system,sans-serif; font-size:12px; border:1px solid #7aa2f7; box-sizing:border-box; }
-  #ps-m * { box-sizing:border-box; }
-  #ps-m ::-webkit-scrollbar { width: 6px; height: 6px; }
-  #ps-m ::-webkit-scrollbar-track { background: transparent; }
-  #ps-m ::-webkit-scrollbar-thumb { background: #3b4261; border-radius: 3px; }
-  #ps-m ::-webkit-scrollbar-thumb:hover { background: #565f89; }
-  #ps-resize-handle { position:absolute; left:0; bottom:0; width:16px; height:16px; cursor:nesw-resize; z-index:10; display:flex; align-items:flex-end; padding:2px; }
-  #ps-resize-handle::after { content:""; width:6px; height:6px; border-left:2px solid #565f89; border-bottom:2px solid #565f89; }
-  #ps-resize-handle:hover::after { border-color:#7aa2f7; }
-  #ps-fab { position:fixed; bottom:24px; right:24px; width:48px; height:48px; background:#7aa2f7; color:#15161e; border-radius:50%; box-shadow:0 8px 16px rgba(0,0,0,0.6); z-index:999999999; display:flex; justify-content:center; align-items:center; cursor:pointer; font-size:24px; user-select:none; transition:0.15s ease; border: 2px solid #1a1b26; }
-  #ps-fab:hover { transform:scale(1.1); filter:brightness(1.1); }
-  .ps-btn { padding:4px 8px; border:none; border-radius:4px; cursor:pointer; font-size:11px; background:#24283b; color:#a9b1d6; transition:0.12s ease; user-select:none; }
-  #ps-m .ps-btn { white-space:nowrap; }
-  .ps-btn:hover:not(:disabled) { filter:brightness(1.2); color:#fff; }
-  .ps-btn-primary { background:#7aa2f7; color:#15161e; font-weight:bold; }
-  .ps-btn-primary:hover:not(:disabled) { background:#89b4fa; color:#15161e; }
-  #ps-run:disabled { background: #2f3549 !important; color: #565f89 !important; cursor: not-allowed !important; box-shadow: none !important; opacity: 1 !important; transform: none !important; }
-  .ps-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-  .ps-input { background:#1f2335; color:#fff; border:1px solid #3b4261; border-radius:4px; padding:5px 8px; font-size:11px; outline:none; }
-  .ps-input:focus { border-color:#7aa2f7; }
-  .ps-segment { display:flex; background:#1a1b26; border-radius:6px; border:1px solid #3b4261; overflow:hidden; height:24px; }
-  .ps-segment label, .ps-segment button { flex:1; display:flex; align-items:center; justify-content:center; font-size:10px; cursor:pointer; color:#9aa5ce; transition:0.15s; border:none; border-right:1px solid #3b4261; background:transparent; margin:0; line-height:1; }
-  .ps-segment label:last-child, .ps-segment button:last-child { border-right:none; }
-  .ps-segment label:hover, .ps-segment button:hover { background:#24283b; color:#fff; }
-  .ps-segment input[type="radio"] { display:none; }
-  .ps-segment input[type="radio"]:checked + span { color:#15161e; background:#7aa2f7; width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-weight:bold; }
-  .ps-segment button.active { color:#15161e; background:#7aa2f7; font-weight:bold; }
-  .ps-merge { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); background:#1a1b26; border-radius:6px; border:1px solid #3b4261; overflow:hidden; }
-  .ps-merge button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:34px; padding:3px 2px; font-size:10px; line-height:1.15; cursor:pointer; color:#9aa5ce; background:transparent; border:none; border-right:1px solid #3b4261; transition:0.15s; }
-  .ps-merge button:last-child { border-right:none; }
-  .ps-merge button:hover { background:#24283b; color:#fff; }
-  .ps-merge button.active { color:#15161e; background:#7aa2f7; font-weight:bold; }
-  .ps-mlabel { white-space:nowrap; }
-  .ps-mcount { font-size:9px; opacity:0.85; font-weight:normal; }
-  .ps-mcount.over { color:#f7768e; opacity:1; }
-  .ps-merge button.active .ps-mcount.over { color:#8c1d2f; }
-  .ps-limit { margin-top:5px; padding:5px 6px; border-radius:4px; background:#2d202a; border:1px solid #f7768e; color:#f7a1b3; font-size:10px; line-height:1.5; }
-  .ps-limit .ps-btn { margin-left:4px; padding:2px 6px; font-size:10px; background:#7aa2f7; color:#15161e; font-weight:bold; }
-  #ps-run.over { background:#e0af68; color:#15161e; }
-  .ps-opt-group { display:flex; align-items:center; gap:8px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #2f3549; }
-  .ps-opt-group:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
-  .ps-opt-lbl { font-size:10px; color:#8a93c0; width:40px; flex-shrink:0; text-align:right; font-weight:bold; }
-  .ps-tag { font-size:9px; padding:1px 4px; border-radius:3px; margin-left:4px; }
-  .ps-tag-brand { color:#7aa2f7; background:#1f293d; border:1px solid #3d59a1; }
-  .ps-tag-staff { color:#9ece6a; background:#1e2d24; border:1px solid #41a6b5; }
-  .ps-tag-unit { color:#ff9e64; background:#2d201a; border:1px solid #8f5a34; font-weight:bold; }
-  .ps-row { display:flex; align-items:center; gap:6px; padding:5px 6px; border-radius:4px; transition:0.1s; user-select:none; cursor:pointer; }
-  .ps-row:hover { background:#24283b; }
-  .ps-row.selected { background:#1e2538; }
-  .ps-k { cursor:pointer; flex-shrink:0; }
-  
-  .ps-badge { display:inline-flex; align-items:center; gap:2px; background:#24283b; border:1px solid #414868; padding:2px 4px; border-radius:3px; font-size:11px; line-height:1.2; }
-  .ps-badge button { padding: 0 2px !important; margin-left: 0; }
-  
-  .ps-star-btn { background:none; border:none; font-size:15px; line-height:1; cursor:pointer; padding:0 6px; color:#737aa2; flex-shrink:0; transition:0.12s; }
-  .ps-star-btn:hover { transform:scale(1.2); color:#e0af68; }
-  .ps-star-btn.active { color:#e0af68 !important; text-shadow:0 0 6px rgba(224,175,104,0.5); }
-  .ps-chip { padding:2px 7px; border-radius:10px; font-size:10px; cursor:pointer; background:#1f2335; color:#9aa5ce; border:1px solid #3b4261; white-space:nowrap; user-select:none; transition:0.12s; }
-  .ps-chip:hover { background:#24283b; color:#fff; }
-  .ps-chip.active { background:#7aa2f722; color:#7aa2f7; border-color:#7aa2f7; font-weight:bold; }
-  
-  .ps-drag-item { transition: 0.1s; }
-  .ps-drag-item.dragging { opacity: 0.4; transform: scale(0.95); }
-  .ps-drag-item.drag-over { border: 1px dashed #7aa2f7; filter: brightness(1.3); }
-  
-  .ps-drag-handle { cursor: grab; padding: 2px 4px; margin-left:-2px; color: #737aa2; user-select: none; touch-action: none; transition: 0.2s; }
-  .ps-drag-handle.disabled { cursor: not-allowed; opacity: 0.25; }
-  
-  #ps-queue-list { max-height: 160px; align-content: flex-start; }
-  .ps-sw { display:inline-block; width:9px; height:9px; border-radius:2px; flex-shrink:0; }
-  .ps-code { color:#7dcfff; font-size:9px; font-family:monospace; }
-  .ps-group { flex-basis:100%; background:#1f2335; border:1px solid #3d59a1; border-radius:4px; }
-  .ps-group-head { display:flex; align-items:center; gap:4px; padding:3px 6px; cursor:pointer; font-size:11px; user-select:none; }
-  .ps-group-head:hover { background:#24283b; }
-  .ps-group-name { font-weight:bold; color:#c0caf5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .ps-group-meta { margin-left:auto; color:#8a93c0; font-size:10px; white-space:nowrap; }
-  .ps-group-body { display:flex; flex-wrap:wrap; gap:4px; padding:4px 6px 6px; border-top:1px dashed #2f3549; }
-  .ps-brand-head { font-size:10px; font-weight:bold; color:#7aa2f7; padding:6px 4px 3px; border-bottom:1px solid #2f3549; margin-bottom:2px; position:sticky; top:-4px; background:#13141c; z-index:1; }
-  #ps-run.running { background:#f7768e !important; color:#15161e !important; }
-  
-  #ps-toast-container { position: fixed; bottom: 85px; right: 24px; z-index: 9999999999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
-  .ps-toast { background: #1f2335; color: #c0caf5; padding: 12px 16px; border-radius: 8px; border-left: 4px solid #7aa2f7; box-shadow: 0 4px 12px rgba(0,0,0,0.5); font-size: 12px; font-weight: bold; transform: translateX(120%); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s; opacity: 0; pointer-events: auto; white-space: pre-wrap; line-height: 1.4; }
-  .ps-toast.show { transform: translateX(0); opacity: 1; }
-  .ps-toast.error { border-left-color: #f7768e; color: #f7768e; }
-  
-  #ps-modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 9999999999; display: none; justify-content: center; align-items: center; backdrop-filter: blur(2px); opacity: 0; transition: opacity 0.2s; font-family:-apple-system,sans-serif; }
-  #ps-modal { background: #1a1b26; border: 1px solid #3b4261; border-radius: 12px; padding: 20px; width: 320px; max-width: 90vw; box-shadow: 0 10px 30px rgba(0,0,0,0.8); transform: translateY(20px); transition: transform 0.2s; }
-  #ps-modal.show { transform: translateY(0); }
-  .ps-modal-title { font-size: 15px; font-weight: bold; color: #7aa2f7; margin-bottom: 10px; }
-  .ps-modal-msg { font-size: 13px; color: #a9b1d6; margin-bottom: 16px; line-height: 1.5; white-space: pre-wrap; max-height: 50vh; overflow-y: auto; }
-  .ps-modal-input { width: 100%; background: #1f2335; color: #fff; border: 1px solid #3b4261; border-radius: 6px; padding: 10px; font-size: 12px; margin-bottom: 16px; outline: none; }
-  .ps-modal-input:focus { border-color: #7aa2f7; }
-  .ps-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
-  .ps-modal-actions .ps-btn { padding: 8px 16px; font-size: 12px; }
+  /* ===== 色の変数（ダーク）。.ps-root はパネル・丸ボタン・ダイアログ・通知の外枠 ===== */
+  .ps-root {
+    --ps-bg:#111214; --ps-surface:#17181b; --ps-surface2:#1d1e22; --ps-raise:#232428;
+    --ps-line:rgba(255,255,255,.08); --ps-line2:rgba(255,255,255,.16);
+    --ps-text:#ececf0; --ps-muted:#9c9ea8; --ps-accent:#a3b6ff; --ps-on-accent:#111214;
+    --ps-ok:#94d48c; --ps-warn:#ff95a4; --ps-gold:#e8bd78;
+    --ps-sel:#ececf0; --ps-sel-fg:#111214; --ps-cta:#ececf0; --ps-cta-fg:#111214; --ps-on-gold:#111214; --ps-on-warn:#111214;
+    --ps-row-sel:rgba(163,182,255,.1); --ps-accent-soft:rgba(163,182,255,.14);
+    --ps-ok-soft:rgba(148,212,140,.14); --ps-warn-soft:rgba(255,149,164,.12); --ps-gold-soft:rgba(232,189,120,.14);
+    --ps-shadow:0 24px 60px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.4);
+    color-scheme:dark;
+    font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,-apple-system,sans-serif;
+    font-feature-settings:"palt"; letter-spacing:.01em; line-height:1.5; color:var(--ps-text);
+  }
+  /* ===== 色の変数（ライト） ===== */
+  .ps-root[data-ps-theme="light"] {
+    --ps-bg:#f5f4f0; --ps-surface:#ffffff; --ps-surface2:#fbfaf7; --ps-raise:#ffffff;
+    --ps-line:rgba(20,22,28,.09); --ps-line2:rgba(20,22,28,.2);
+    --ps-text:#17181c; --ps-muted:#5d606a; --ps-accent:#3554c9; --ps-on-accent:#ffffff;
+    --ps-ok:#2a7a37; --ps-warn:#c03050; --ps-gold:#9a5f0c;
+    --ps-sel:rgba(53,84,201,.1); --ps-sel-fg:#2a45b0; --ps-cta:#3554c9; --ps-cta-fg:#ffffff; --ps-on-gold:#ffffff; --ps-on-warn:#ffffff;
+    --ps-row-sel:rgba(53,84,201,.07); --ps-accent-soft:rgba(53,84,201,.1);
+    --ps-ok-soft:rgba(42,122,55,.1); --ps-warn-soft:rgba(192,48,80,.08); --ps-gold-soft:rgba(154,95,12,.1);
+    --ps-shadow:0 24px 60px rgba(20,22,28,.18), 0 2px 8px rgba(20,22,28,.08);
+    color-scheme:light;
+  }
+  .ps-root, .ps-root * { box-sizing:border-box; }
+  /* 公式サイト側のボタン・入力欄の見た目を受け継がないための初期化（:where で優先度を0にして、下の部品の指定が必ず勝つようにする） */
+  :where(.ps-root) :is(button, input, select, textarea) { font:inherit; letter-spacing:inherit; color:inherit; margin:0; }
+  :where(.ps-root) button { cursor:pointer; }
+  .ps-root :focus-visible { outline:2px solid var(--ps-accent); outline-offset:2px; }
+  .ps-ic { width:16px; height:16px; flex-shrink:0; display:inline-block; vertical-align:-3px; }
 
-  @media screen and (max-width: 768px), screen and (max-height: 500px) {
-    #ps-m { 
-      top:auto !important; bottom:0 !important; right:0 !important; left:0 !important; 
-      width:100% !important; max-width:100% !important; margin:0 !important; 
-      height:85dvh !important; max-height:calc(100dvh - 20px) !important; 
-      border-radius:16px 16px 0 0; border-bottom:none; 
-      padding: 14px max(10px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)) !important; 
-    }
-    #ps-resize-handle { display: none !important; }
-    #ps-body { overflow-y: auto !important; padding-bottom: 5px !important; }
-    #ps-l { flex: 1 1 auto !important; height: auto !important; min-height: 150px !important; overflow-y: auto !important; }
-    #ps-run { 
-      position: sticky !important; bottom: 0 !important; z-index: 100 !important; 
-      margin-top: 10px !important; padding: 14px !important; font-size: 15px !important; 
-      border-radius: 8px; font-weight: bold; min-height: 48px; flex-shrink: 0 !important; 
-      box-shadow: 0 -15px 20px 5px #1a1b26 !important; 
-    }
-    .ps-row { padding: 10px !important; margin-bottom: 4px; background: #181924; border: 1px solid #282b3d; border-radius: 6px; gap: 10px !important; }
-    .ps-row.selected { background: #1f273d !important; border-color: #3d59a1 !important; }
-    .ps-k { transform: scale(1.4) !important; margin: 0 4px 0 2px !important; }
-    .ps-star-btn { font-size: 18px !important; padding: 4px 8px !important; }
-    .ps-name-label { font-size: 13px !important; font-weight: 500; }
-    .ps-btn { padding: 6px 10px; font-size: 12px; }
-    .ps-input { font-size: 13px; padding: 7px; }
-    .ps-segment { height: 32px; }
-    .ps-segment label, .ps-segment button { font-size: 11px; }
-    #ps-fab { bottom: 16px; right: 16px; width: 54px; height: 54px; font-size: 26px; }
-    .ps-chip { padding: 4px 10px; font-size: 11px; }
-    
-    #ps-queue-list { max-height: 140px !important; gap: 4px !important; }
-    .ps-group-head { padding: 8px 10px; font-size: 12px; }
-    .ps-brand-head { font-size: 11px; padding: 8px 4px 4px; }
-    
-    #ps-sa, #ps-ca { padding: 6px 12px !important; font-size: 12px !important; font-weight: bold !important; border-radius: 6px !important; }
-    #ps-sa { background: #3d59a1 !important; color: #fff !important; }
-    #ps-ca { background: #2f3549 !important; color: #a9b1d6 !important; }
-    
-    #ps-m .ps-drag-handle { 
-      padding: 8px 12px 8px 6px !important; 
-      margin: -8px 0 -8px -6px !important; 
-      font-size: 15px !important; 
-      color: #7aa2f7 !important; 
-      line-height: 1 !important;
-    }
-    #ps-m .ps-drag-handle.disabled { color: #565f89 !important; }
-    
-    #ps-toast-container { bottom: 100px; right: 16px; left: 16px; align-items: center; }
-    .ps-toast { transform: translateY(120%); width: 100%; max-width: 350px; font-size: 13px; }
-    .ps-toast.show { transform: translateY(0); }
+  /* ===== パネル本体 ===== */
+  #ps-m { position:fixed; top:18px; right:18px; width:500px; height:750px; min-width:280px; min-height:240px; max-width:95vw; max-height:94vh; background:var(--ps-bg); border:1px solid var(--ps-line2); border-radius:16px; box-shadow:var(--ps-shadow); z-index:999999999; padding:12px 14px 14px; display:flex; flex-direction:column; font-size:13px; }
+  #ps-m ::-webkit-scrollbar { width:8px; height:8px; }
+  #ps-m ::-webkit-scrollbar-track { background:transparent; }
+  #ps-m ::-webkit-scrollbar-thumb { background:var(--ps-line2); border-radius:4px; border:2px solid transparent; background-clip:padding-box; }
+  #ps-resize-handle { position:absolute; left:0; bottom:0; width:18px; height:18px; cursor:nesw-resize; z-index:10; display:flex; align-items:flex-end; padding:4px; }
+  #ps-resize-handle::after { content:""; width:7px; height:7px; border-left:2px solid var(--ps-line2); border-bottom:2px solid var(--ps-line2); border-radius:0 0 0 2px; }
+  #ps-resize-handle:hover::after { border-color:var(--ps-accent); }
+  .ps-head { display:flex; align-items:center; gap:8px; padding-bottom:10px; margin-bottom:10px; border-bottom:1px solid var(--ps-line); flex-shrink:0; }
+  .ps-title { font-size:14px; font-weight:700; letter-spacing:.03em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ps-ver { margin-left:6px; font-size:11px; font-weight:600; color:var(--ps-muted); font-variant-numeric:tabular-nums; }
+  .ps-head-acts { margin-left:auto; display:flex; gap:6px; flex-shrink:0; }
+  #ps-body { display:flex; flex-direction:column; gap:10px; flex:1; min-height:0; overflow:hidden; }
+  #ps-main { display:flex; flex-direction:column; gap:8px; flex:1; min-height:0; }
+  #ps-m.opt-open #ps-main { display:none; }
+
+  /* ===== ボタン・入力欄 ===== */
+  .ps-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:32px; padding:0 12px; border-radius:9px; border:1px solid var(--ps-line); background:transparent; color:var(--ps-text); font-size:12px; font-weight:600; white-space:nowrap; user-select:none; transition:background-color .15s, border-color .15s, color .15s, transform .1s; }
+  .ps-btn:hover:not(:disabled) { background:var(--ps-surface2); border-color:var(--ps-line2); }
+  .ps-btn:active:not(:disabled) { transform:scale(.97); }
+  .ps-btn:disabled { opacity:.5; cursor:not-allowed; }
+  .ps-btn-primary { background:var(--ps-cta); border-color:var(--ps-cta); color:var(--ps-cta-fg); }
+  .ps-btn-primary:hover:not(:disabled) { background:var(--ps-cta); border-color:var(--ps-cta); filter:brightness(1.08); }
+  .ps-btn-sm { min-height:28px; padding:0 10px; font-size:12px; }
+  .ps-btn-icon { width:32px; padding:0; color:var(--ps-muted); }
+  .ps-btn-icon:hover:not(:disabled) { color:var(--ps-text); }
+  .ps-btn-quiet { border-color:transparent; color:var(--ps-muted); }
+  .ps-btn-danger { border-color:transparent; color:var(--ps-warn); }
+  .ps-btn-danger:hover:not(:disabled) { background:var(--ps-warn-soft); border-color:transparent; }
+  #ps-toggle-opt[aria-expanded="true"] { background:var(--ps-sel); border-color:transparent; color:var(--ps-sel-fg); }
+  .ps-input { min-height:34px; padding:0 10px; border-radius:9px; border:1px solid var(--ps-line); background:var(--ps-surface); color:var(--ps-text); font-size:13px; outline:none; }
+  .ps-input:focus { border-color:var(--ps-accent); }
+  select.ps-input { padding-right:6px; cursor:pointer; }
+  .ps-search { position:relative; display:flex; align-items:center; }
+  .ps-search .ps-ic { position:absolute; left:9px; color:var(--ps-muted); pointer-events:none; }
+  .ps-search .ps-input { width:100%; padding-left:30px; }
+
+  /* ===== 選択ボタン（並び・ペンラ・テーマなど） ===== */
+  .ps-seg { display:flex; gap:2px; padding:3px; border:1px solid var(--ps-line); border-radius:11px; background:transparent; }
+  .ps-seg > button, .ps-seg > label { position:relative; flex:1; display:flex; align-items:center; justify-content:center; min-height:30px; padding:0 8px; border:0; border-radius:8px; background:transparent; color:var(--ps-muted); font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; transition:background-color .15s, color .15s; }
+  .ps-seg > button:hover, .ps-seg > label:hover { color:var(--ps-text); }
+  .ps-seg > button.active { background:var(--ps-sel); color:var(--ps-sel-fg); }
+  .ps-seg input[type="radio"] { position:absolute; opacity:0; pointer-events:none; }
+  .ps-seg > label:has(input:checked) { background:var(--ps-sel); color:var(--ps-sel-fg); }
+  .ps-seg > label:has(input:focus-visible) { outline:2px solid var(--ps-accent); outline-offset:1px; }
+  .ps-merge { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:2px; padding:3px; border:1px solid var(--ps-line); border-radius:11px; }
+  .ps-merge button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; min-height:44px; padding:4px 2px; border:0; border-radius:8px; background:transparent; color:var(--ps-muted); font-size:11px; font-weight:600; line-height:1.25; transition:background-color .15s, color .15s; }
+  .ps-merge button:hover { color:var(--ps-text); }
+  .ps-merge button.active { background:var(--ps-sel); color:var(--ps-sel-fg); }
+  .ps-mlabel { white-space:nowrap; }
+  .ps-mcount { font-size:11px; font-weight:500; opacity:.8; font-variant-numeric:tabular-nums; }
+  .ps-mcount.over { color:var(--ps-warn); opacity:1; font-weight:700; }
+  .ps-hint { margin-top:6px; font-size:11px; color:var(--ps-muted); line-height:1.6; }
+
+  /* ===== チェックボックス（一覧の選択・設定のオンオフ） ===== */
+  .ps-root input.ps-k, .ps-root input.ps-cb { appearance:none; -webkit-appearance:none; width:18px; height:18px; margin:0; flex-shrink:0; border:1.5px solid var(--ps-line2); border-radius:6px; background:transparent; display:inline-grid; place-content:center; cursor:pointer; transition:background-color .12s, border-color .12s; }
+  .ps-root input.ps-k::after, .ps-root input.ps-cb::after { content:""; width:9px; height:5px; border:2px solid var(--ps-on-accent); border-top:0; border-right:0; transform:translateY(-1px) rotate(-45deg); opacity:0; }
+  .ps-root input.ps-k:checked, .ps-root input.ps-cb:checked { background:var(--ps-accent); border-color:var(--ps-accent); }
+  .ps-root input.ps-k:checked::after, .ps-root input.ps-cb:checked::after { opacity:1; }
+  .ps-root input.ps-k:disabled { opacity:.35; cursor:not-allowed; }
+  .ps-check { display:inline-flex; align-items:center; gap:7px; min-height:30px; font-size:12px; color:var(--ps-text); cursor:pointer; user-select:none; }
+
+  /* ===== 設定画面 ===== */
+  #ps-opt-panel { display:none; flex-direction:column; gap:16px; flex:1; min-height:0; overflow-y:auto; padding:2px 2px 6px; }
+  #ps-m.opt-open #ps-opt-panel { display:flex; }
+  .ps-opt-head { display:flex; align-items:center; justify-content:space-between; }
+  .ps-opt-head b { font-size:15px; }
+  .ps-sec { display:flex; flex-direction:column; gap:8px; }
+  .ps-sec + .ps-sec { padding-top:14px; border-top:1px solid var(--ps-line); }
+  .ps-sec-title { font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--ps-muted); }
+  .ps-sec-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px 16px; }
+  .ps-note { font-size:11px; color:var(--ps-muted); line-height:1.6; }
+
+  /* ===== 追加予定 ===== */
+  .ps-queue { background:var(--ps-surface); border:1px solid var(--ps-line); border-radius:12px; padding:8px 10px; flex-shrink:0; }
+  .ps-qhead { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; }
+  #ps-queue-toggle { display:inline-flex; align-items:center; gap:6px; min-height:32px; padding:0 4px; margin-left:-4px; border:0; border-radius:8px; background:transparent; font-size:13px; font-weight:600; color:var(--ps-text); white-space:nowrap; flex-shrink:0; }
+  #ps-queue-toggle:hover { background:var(--ps-surface2); }
+  #ps-queue-toggle b { font-size:15px; font-variant-numeric:tabular-nums; }
+  #ps-queue-arrow { display:inline-flex; color:var(--ps-muted); transition:transform .2s; }
+  #ps-queue-toggle[aria-expanded="true"] #ps-queue-arrow { transform:rotate(180deg); }
+  #ps-queue-merged { font-size:12px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--ps-muted); white-space:nowrap; }
+  #ps-queue-merged.ok { color:var(--ps-ok); } #ps-queue-merged.near { color:var(--ps-gold); } #ps-queue-merged.over { color:var(--ps-warn); }
+  .ps-qacts { margin-left:auto; display:flex; gap:4px; flex-shrink:0; }
+  .ps-meter { height:4px; margin:6px 0 2px; border-radius:2px; background:var(--ps-line); overflow:hidden; }
+  .ps-meter i { display:block; height:100%; width:0; border-radius:2px; background:var(--ps-ok); transition:width .25s, background-color .25s; }
+  .ps-meter.near i { background:var(--ps-gold); } .ps-meter.over i { background:var(--ps-warn); }
+  .ps-limit { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin-top:8px; padding:8px 10px; border-radius:10px; background:var(--ps-warn-soft); color:var(--ps-warn); font-size:12px; font-weight:600; line-height:1.5; }
+  .ps-limit .ps-btn { min-height:28px; padding:0 10px; font-size:12px; }
+  #ps-queue-list { display:none; flex-wrap:wrap; gap:6px; max-height:170px; overflow-y:auto; align-content:flex-start; margin-top:8px; padding-top:8px; border-top:1px solid var(--ps-line); }
+  .ps-qempty { font-size:12px; color:var(--ps-muted); line-height:1.6; }
+  .ps-badge { display:inline-flex; align-items:center; gap:6px; max-width:100%; min-height:30px; padding:2px 2px 2px 8px; border:1px solid var(--ps-line); border-radius:999px; background:var(--ps-surface2); font-size:12px; line-height:1.2; }
+  .ps-badge .ps-bname { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ps-badge.skip { opacity:.55; } .ps-badge.skip .ps-bname { text-decoration:line-through; }
+  .ps-del { display:inline-grid; place-content:center; width:24px; height:24px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--ps-muted); flex-shrink:0; }
+  .ps-del:hover { background:var(--ps-warn-soft); color:var(--ps-warn); }
+  .ps-del .ps-ic { width:14px; height:14px; }
+  .ps-sw { display:inline-block; width:10px; height:10px; border-radius:3px; flex-shrink:0; box-shadow:inset 0 0 0 1px rgba(127,127,127,.35); }
+  .ps-code { font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:11px; color:var(--ps-muted); white-space:nowrap; }
+  .ps-drag-item { transition:opacity .1s, transform .1s; }
+  .ps-drag-item.dragging { opacity:.4; transform:scale(.96); }
+  .ps-drag-item.drag-over { border-color:var(--ps-accent); border-style:dashed; }
+  .ps-drag-handle { display:inline-flex; margin-left:-4px; padding:2px; color:var(--ps-muted); cursor:grab; user-select:none; touch-action:none; }
+  .ps-drag-handle .ps-ic { width:14px; height:14px; }
+  .ps-drag-handle.disabled { cursor:not-allowed; opacity:.3; }
+  .ps-group { flex-basis:100%; border:1px solid var(--ps-line); border-radius:10px; background:var(--ps-surface2); }
+  .ps-group-head { display:flex; align-items:center; gap:6px; width:100%; min-height:34px; padding:4px 10px; border:0; border-radius:10px; background:transparent; font-size:12px; text-align:left; }
+  .ps-group-head:hover { background:var(--ps-accent-soft); }
+  .ps-group-name { font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ps-group-meta { margin-left:auto; display:inline-flex; align-items:center; gap:4px; color:var(--ps-muted); font-size:11px; white-space:nowrap; }
+  .ps-group-meta .ps-ic { width:14px; height:14px; transition:transform .2s; }
+  .ps-group.open .ps-group-meta .ps-ic { transform:rotate(180deg); }
+  .ps-group-body { display:flex; flex-wrap:wrap; gap:6px; padding:6px 8px 8px; border-top:1px solid var(--ps-line); }
+
+  /* ===== ブランド・検索・ユニット ===== */
+  .ps-tools { display:flex; gap:6px; flex-shrink:0; }
+  .ps-tools select { flex:1 1 40%; min-width:0; }
+  .ps-tools .ps-search { flex:1 1 60%; min-width:0; }
+  .ps-subtools { display:flex; align-items:center; gap:8px; flex-shrink:0; min-height:30px; }
+  #ps-unit-chips { display:none; flex:1; min-width:0; flex-wrap:nowrap; overflow-x:auto; gap:6px; padding:1px 0; scrollbar-width:none; }
+  #ps-unit-chips::-webkit-scrollbar { display:none; }
+  .ps-sel-acts { display:flex; gap:4px; margin-left:auto; flex-shrink:0; }
+  .ps-chip { display:inline-flex; align-items:center; min-height:28px; padding:0 12px; border:1px solid var(--ps-line); border-radius:999px; background:transparent; color:var(--ps-muted); font-size:12px; font-weight:600; white-space:nowrap; cursor:pointer; user-select:none; transition:background-color .15s, color .15s, border-color .15s; }
+  .ps-chip:hover { color:var(--ps-text); border-color:var(--ps-line2); }
+  .ps-chip.active { background:var(--ps-sel); border-color:transparent; color:var(--ps-sel-fg); }
+
+  /* ===== アイドル一覧 ===== */
+  #ps-l { flex:1; min-height:80px; overflow-y:auto; padding:4px; border:1px solid var(--ps-line); border-radius:12px; background:var(--ps-surface); }
+  .ps-empty { padding:16px 10px; color:var(--ps-muted); font-size:12px; text-align:center; line-height:1.6; }
+  .ps-empty.err { color:var(--ps-warn); }
+  .ps-row { display:flex; align-items:center; gap:8px; min-height:38px; padding:4px 8px; border-radius:8px; cursor:pointer; user-select:none; transition:background-color .1s; }
+  .ps-row:hover { background:var(--ps-surface2); }
+  .ps-row.selected { background:var(--ps-row-sel); }
+  .ps-row.skip { opacity:.55; }
+  .ps-row.skip .ps-name-label { text-decoration:line-through; }
+  .ps-star-btn { display:inline-grid; place-content:center; width:26px; height:26px; margin:0 -2px; padding:0; border:0; border-radius:7px; background:transparent; color:var(--ps-muted); flex-shrink:0; opacity:.6; transition:color .12s, opacity .12s; }
+  .ps-star-btn:hover { opacity:1; color:var(--ps-gold); }
+  .ps-star-btn.active { opacity:1; color:var(--ps-gold); }
+  .ps-star-btn.active .ps-ic { fill:currentColor; }
+  .ps-swatch { width:16px; height:16px; border-radius:5px; flex-shrink:0; box-shadow:inset 0 0 0 1px rgba(127,127,127,.35); }
+  .ps-name-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+  .ps-pen { flex-shrink:0; margin-left:4px; font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12px; font-weight:600; color:var(--ps-muted); font-variant-numeric:tabular-nums; }
+  .ps-pen.none { color:var(--ps-warn); }
+  .ps-tag { display:inline-block; margin-left:6px; padding:1px 6px; border-radius:5px; font-size:10px; font-weight:700; vertical-align:1px; }
+  .ps-tag-brand { color:var(--ps-accent); background:var(--ps-accent-soft); }
+  .ps-tag-staff { color:var(--ps-ok); background:var(--ps-ok-soft); }
+  .ps-tag-unit { color:var(--ps-gold); background:var(--ps-gold-soft); }
+  .ps-utag { margin-left:6px; font-size:11px; color:var(--ps-muted); }
+  .ps-brand-head { position:sticky; top:-4px; z-index:1; margin:0 -4px 2px; padding:8px 12px 4px; background:var(--ps-surface); font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--ps-muted); border-bottom:1px solid var(--ps-line); }
+
+  /* ===== 実行ボタン ===== */
+  #ps-run { width:100%; min-height:44px; flex-shrink:0; border-radius:12px; font-size:14px; font-weight:700; }
+  #ps-run.over { background:var(--ps-gold); border-color:var(--ps-gold); color:var(--ps-on-gold); }
+  #ps-run.running { background:var(--ps-warn); border-color:var(--ps-warn); color:var(--ps-on-warn); }
+  #ps-run:disabled { background:var(--ps-surface2) !important; border-color:var(--ps-line) !important; color:var(--ps-muted) !important; opacity:1; filter:none; transform:none; }
+
+  /* ===== お知らせ（新バージョン） ===== */
+  .ps-update { display:flex; align-items:center; gap:8px; width:100%; min-height:36px; padding:6px 12px; border:0; border-radius:10px; background:var(--ps-gold-soft); color:var(--ps-gold); font-size:12px; font-weight:700; text-align:left; flex-shrink:0; }
+  .ps-update:hover { filter:brightness(1.08); }
+
+  /* ===== 閉じたときの丸ボタン ===== */
+  #ps-fab { position:fixed; bottom:24px; right:24px; width:52px; height:52px; padding:0; border:0; border-radius:50%; background:var(--ps-cta); color:var(--ps-cta-fg); box-shadow:var(--ps-shadow); z-index:999999999; display:flex; justify-content:center; align-items:center; cursor:pointer; user-select:none; transition:transform .15s; }
+  #ps-fab:hover { transform:scale(1.06); }
+  #ps-fab .ps-ic { width:24px; height:24px; }
+
+  /* ===== 通知 ===== */
+  #ps-toast-container { position:fixed; bottom:88px; right:24px; z-index:9999999999; display:flex; flex-direction:column; align-items:flex-end; gap:8px; pointer-events:none; }
+  .ps-toast { display:flex; align-items:flex-start; gap:8px; max-width:360px; padding:10px 14px; border:1px solid var(--ps-line2); border-radius:12px; background:var(--ps-raise); color:var(--ps-text); box-shadow:var(--ps-shadow); font-size:13px; font-weight:600; line-height:1.5; white-space:pre-wrap; pointer-events:auto; opacity:0; transform:translateY(8px); transition:opacity .2s, transform .2s; }
+  .ps-toast.show { opacity:1; transform:none; }
+  .ps-toast .ps-ic { margin-top:2px; color:var(--ps-ok); }
+  .ps-toast.error .ps-ic { color:var(--ps-warn); }
+
+  /* ===== ダイアログ ===== */
+  #ps-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9999999999; display:none; justify-content:center; align-items:center; padding:16px; opacity:0; transition:opacity .2s; -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); }
+  #ps-modal { width:360px; max-width:100%; padding:20px; border:1px solid var(--ps-line2); border-radius:16px; background:var(--ps-surface); box-shadow:var(--ps-shadow); transform:translateY(12px); transition:transform .2s; }
+  #ps-modal.show { transform:none; }
+  .ps-modal-title { font-size:15px; font-weight:700; margin-bottom:8px; }
+  .ps-modal-msg { font-size:13px; color:var(--ps-muted); margin-bottom:16px; line-height:1.7; white-space:pre-wrap; max-height:50vh; overflow-y:auto; }
+  .ps-modal-input { width:100%; min-height:96px; padding:10px; margin-bottom:6px; border:1px solid var(--ps-line); border-radius:10px; background:var(--ps-bg); color:var(--ps-text); font-size:13px; line-height:1.6; outline:none; resize:vertical; }
+  .ps-modal-input:focus { border-color:var(--ps-accent); }
+  .ps-modal-kbd { font-size:11px; color:var(--ps-muted); margin-bottom:14px; }
+  .ps-modal-actions { display:flex; justify-content:flex-end; gap:8px; }
+  .ps-modal-actions .ps-btn { min-height:38px; padding:0 18px; font-size:13px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ps-root, .ps-root * { transition:none !important; }
   }
 
+  /* ===== スマホ（画面の下から出るシート） ===== */
+  @media screen and (max-width: 768px), screen and (max-height: 500px) {
+    #ps-m {
+      top:auto !important; bottom:0 !important; right:0 !important; left:0 !important;
+      width:100% !important; max-width:100% !important; margin:0 !important;
+      height:85dvh !important; max-height:calc(100dvh - 20px) !important;
+      border-radius:20px 20px 0 0; border-bottom:none;
+      padding:14px max(12px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)) !important;
+    }
+    #ps-resize-handle { display:none !important; }
+    #ps-body { overflow-y:auto !important; }
+    #ps-l { flex:1 1 auto !important; height:auto !important; min-height:150px !important; overflow-y:auto !important; }
+    #ps-run { position:sticky !important; bottom:0 !important; z-index:100 !important; min-height:50px; font-size:15px; box-shadow:0 -14px 18px 4px var(--ps-bg) !important; }
+    .ps-row { min-height:48px; padding:6px 10px; gap:10px; }
+    .ps-root input.ps-k { width:22px; height:22px; border-radius:7px; }
+    .ps-star-btn { width:34px; height:34px; }
+    .ps-star-btn .ps-ic { width:18px; height:18px; }
+    .ps-name-label { font-size:14px; }
+    .ps-btn { min-height:36px; font-size:13px; }
+    .ps-btn-icon { width:36px; }
+    .ps-input { min-height:40px; font-size:16px; }
+    .ps-seg > button, .ps-seg > label { min-height:36px; font-size:13px; }
+    .ps-chip { min-height:34px; padding:0 14px; font-size:13px; }
+    .ps-badge { min-height:34px; font-size:13px; }
+    .ps-del { width:30px; height:30px; }
+    #ps-queue-list { max-height:150px !important; }
+    #ps-m .ps-drag-handle { padding:8px 6px; margin:-8px 0 -8px -6px; color:var(--ps-accent); }
+    #ps-m .ps-drag-handle.disabled { color:var(--ps-muted); }
+    #ps-fab { bottom:16px; right:16px; width:56px; height:56px; }
+    #ps-toast-container { bottom:96px; right:16px; left:16px; align-items:center; }
+    .ps-toast { width:100%; max-width:380px; }
+  }
   @media screen and (max-height: 500px) and (orientation: landscape) {
-    #ps-m { height: 100dvh !important; max-height: 100dvh !important; border-radius: 0 !important; top: 0 !important; }
+    #ps-m { height:100dvh !important; max-height:100dvh !important; border-radius:0 !important; top:0 !important; }
   }
 `;
 
@@ -737,6 +845,26 @@ const PS_STYLES = `
  * UIManager: パネル生成、ボタン操作、追加予定／一覧の描画、抽出処理
  */
 
+// 線のアイコン（絵文字の代わり。文字と同じ色で描かれ、どのOS・テーマでも同じ見た目になる）
+const PS_ICONS = {
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>',
+  minus: '<path d="M6 12h12"/>',
+  close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+  chevron: '<path d="M6.5 9.5l5.5 5.5 5.5-5.5"/>',
+  refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/>',
+  paste: '<rect x="6" y="4.5" width="12" height="16" rx="2.5"/><path d="M9.5 4.5V3.5h5v1M9.5 10h5M9.5 13.5h5M9.5 17h3"/>',
+  copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/>',
+  load: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>',
+  star: '<path d="M12 3.8l2.5 5.1 5.6.8-4 3.9.9 5.6-5-2.6-5 2.6.9-5.6-4-3.9 5.6-.8z"/>',
+  grip: '<path d="M9 6.5h.01M15 6.5h.01M9 12h.01M15 12h.01M9 17.5h.01M15 17.5h.01" stroke-width="3"/>',
+  check: '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/>',
+  alert: '<path d="M12 4.5l8.5 15h-17z"/><path d="M12 10.5v4M12 17h.01"/>',
+  bell: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+  pen: '<path d="M9.5 10.5h5V20a1.5 1.5 0 0 1-1.5 1.5h-2A1.5 1.5 0 0 1 9.5 20z"/><path d="M10 10.5V7a2 2 0 0 1 4 0v3.5"/><path d="M12 2v1.2M6.8 3.6l.9.9M17.2 3.6l-.9.9"/>'
+};
+const psIcon = (name, cls = "") => `<svg class="ps-ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PS_ICONS[name]}</svg>`;
+
 class UIManager {
   constructor(app, store, site) {
     this.app = app; this.store = store; this.site = site;
@@ -746,7 +874,7 @@ class UIManager {
 
   inject() {
     if (document.getElementById("ps-m")) return false;
-    this.injectStyles(); this.buildHTML(); this.cacheElements(); this.bindEvents(); this.updateMergeUI(); this.checkUpdate();
+    this.injectStyles(); this.buildHTML(); this.cacheElements(); this.applyTheme(); this.bindEvents(); this.updateMergeUI(); this.checkUpdate();
     return true;
   }
 
@@ -786,8 +914,20 @@ class UIManager {
     e.mergeBtns.forEach(b => {
       const opt = CONFIG.MERGE_OPTIONS.find(o => o.id === b.dataset.mopt);
       b.classList.toggle("active", opt === cur);
+      b.setAttribute("aria-pressed", opt === cur);
       b.title = this.mergeHint(opt);
     });
+    if (e.mergeHint) e.mergeHint.textContent = this.mergeHint(cur);
+  }
+
+  // テーマ（自動・ダーク・ライト）。自動は端末の設定に合わせる
+  applyTheme() {
+    const pref = localStorage.getItem(CONFIG.KEYS.THEME) || "auto";
+    const mq = window.matchMedia?.("(prefers-color-scheme: light)");
+    const t = pref === "auto" ? (mq?.matches ? "light" : "dark") : pref;
+    ["ps-m", "ps-fab", "ps-modal-overlay", "ps-toast-container"].forEach(id => document.getElementById(id)?.setAttribute("data-ps-theme", t));
+    this.els.themeBtns?.forEach(b => { const on = b.dataset.theme === pref; b.classList.toggle("active", on); b.setAttribute("aria-pressed", on); });
+    if (mq && !this._themeWatch) { this._themeWatch = true; mq.addEventListener?.("change", () => { if ((localStorage.getItem(CONFIG.KEYS.THEME) || "auto") === "auto") this.applyTheme(); }); }
   }
 
   async checkUpdate() {
@@ -804,9 +944,9 @@ class UIManager {
         if (latestVer) localStorage.setItem(KEY, JSON.stringify({ t: Date.now(), v: latestVer }));
       }
       if (latestVer && Utils.compareVersion(latestVer, CURRENT_VERSION) > 0) {
-        const b = document.createElement("div");
-        b.style.cssText = "background:#ff9e64;color:#15161e;font-weight:bold;font-size:11px;padding:6px;text-align:center;cursor:pointer;border-radius:4px;margin-bottom:6px;flex-shrink:0;";
-        b.textContent = `📢 新バージョン(v${latestVer})が公開されています！クリックして更新ページへ`;
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "ps-update";
+        b.innerHTML = `${psIcon("bell")}<span>新しいバージョン（v${Utils.escapeHtml(latestVer)}）があります。押すと更新ページを開きます</span>`;
         b.onclick = () => window.open(`https://github.com/${CONFIG.GITHUB_REPO}/releases/latest`, "_blank");
         this.els.body.insertBefore(b, this.els.body.firstChild);
       }
@@ -818,7 +958,9 @@ class UIManager {
     if (!container) return;
     const el = document.createElement("div");
     el.className = `ps-toast ${isError ? 'error' : ''}`;
-    el.textContent = message;
+    el.setAttribute("role", isError ? "alert" : "status");
+    el.innerHTML = psIcon(isError ? "alert" : "check");
+    const t = document.createElement("span"); t.textContent = message; el.appendChild(t);
     container.appendChild(el);
     setTimeout(() => el.classList.add("show"), 10);
     setTimeout(() => {
@@ -836,6 +978,8 @@ class UIManager {
       const inputEl = document.getElementById("ps-modal-input");
       const btnCancel = document.getElementById("ps-modal-cancel");
       const btnOk = document.getElementById("ps-modal-ok");
+      const kbd = document.getElementById("ps-modal-kbd");
+      const opener = document.activeElement;
 
       titleEl.textContent = opts.title || "お知らせ";
       msgEl.textContent = opts.message || "";
@@ -844,28 +988,36 @@ class UIManager {
         inputEl.style.display = "block";
         inputEl.placeholder = opts.placeholder || "";
         inputEl.value = "";
+        kbd.style.display = "block";
       } else {
         inputEl.style.display = "none";
+        kbd.style.display = "none";
       }
 
       btnCancel.style.display = opts.hideCancel ? "none" : "block";
       btnOk.textContent = opts.okText || "OK";
       btnCancel.textContent = opts.cancelText || "キャンセル";
 
+      const onKey = ev => {
+        if (ev.key === "Escape") { ev.preventDefault(); close(opts.hideCancel ? true : null); }
+        else if (ev.key === "Enter" && (!opts.isPrompt || ev.ctrlKey || ev.metaKey) && !ev.isComposing) { ev.preventDefault(); btnOk.click(); }
+      };
       const close = (val) => {
+        overlay.removeEventListener("keydown", onKey);
         overlay.style.opacity = "0";
         modal.classList.remove("show");
-        setTimeout(() => { overlay.style.display = "none"; resolve(val); }, 200);
+        setTimeout(() => { overlay.style.display = "none"; if (opener && document.contains(opener)) opener.focus?.({ preventScroll: true }); resolve(val); }, 200);
       };
 
       btnCancel.onclick = () => close(null);
       btnOk.onclick = () => close(opts.isPrompt ? inputEl.value : true);
+      overlay.addEventListener("keydown", onKey);
 
       overlay.style.display = "flex";
       setTimeout(() => {
         overlay.style.opacity = "1";
         modal.classList.add("show");
-        if (opts.isPrompt) inputEl.focus();
+        (opts.isPrompt ? inputEl : btnOk).focus();
       }, 10);
     });
   }
@@ -878,7 +1030,7 @@ class UIManager {
 
   // ブランドの選択肢。colors.json のシート一覧が変わったときにも呼ばれる（表示中のブランドがなくなったら先頭へ）
   brandOptionsHTML() {
-    return CONFIG.SHEETS.map(k => `<option value="${Utils.escapeHtml(k)}">${Utils.escapeHtml(k)}</option>`).join("") + `<option value="__search" hidden>🔍 全ブランドから検索中</option>`;
+    return CONFIG.SHEETS.map(k => `<option value="${Utils.escapeHtml(k)}">${Utils.escapeHtml(k)}</option>`).join("") + `<option value="__search" hidden>全ブランドから検索中</option>`;
   }
   renderBrandOptions() {
     const s = this.store;
@@ -889,95 +1041,110 @@ class UIManager {
 
   buildHTML() {
     const customId = localStorage.getItem(CONFIG.KEYS.ID) || "";
-    document.body.insertAdjacentHTML("beforeend", `<div id="ps-fab" style="display:none;" title="アシストを開く">✨</div>
-      <div id="ps-m">
+    const st = this.store;
+    const segBtn = (id, label, on, title = "") => `<button type="button" id="${id}" class="${on ? "active" : ""}" aria-pressed="${on}" ${title ? `title="${title}"` : ""}>${label}</button>`;
+    document.body.insertAdjacentHTML("beforeend", `<button type="button" id="ps-fab" class="ps-root" style="display:none;" title="Penlight Assistant を開く" aria-label="Penlight Assistant を開く">${psIcon("pen")}</button>
+      <div id="ps-m" class="ps-root" role="dialog" aria-label="Penlight Assistant">
         <div id="ps-resize-handle" title="ドラッグしてサイズ変更"></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #2f3549;flex-shrink:0;">
-          <b style="font-size:13px;color:#7aa2f7;" title="Penlight Assistant (for MIX PENLa PRO)">Penlight Assistant v${CURRENT_VERSION}</b>
-          <div style="display:flex;gap:4px;">
-            <button id="ps-toggle-opt" class="ps-btn" style="padding:2px 7px;">⚙設定</button>
-            <button id="ps-minimize" class="ps-btn" style="padding:2px 8px;">ー</button>
+        <div class="ps-head">
+          <span class="ps-title" title="Penlight Assistant (for MIX PENLa PRO)">Penlight Assistant<span class="ps-ver">v${CURRENT_VERSION}</span></span>
+          <div class="ps-head-acts">
+            <button type="button" id="ps-toggle-opt" class="ps-btn ps-btn-sm" aria-expanded="false" aria-controls="ps-opt-panel">${psIcon("gear")}設定</button>
+            <button type="button" id="ps-minimize" class="ps-btn ps-btn-sm ps-btn-icon" title="小さくする" aria-label="小さくする">${psIcon("minus")}</button>
           </div>
         </div>
-        <div id="ps-body" style="display:flex;flex-direction:column;gap:6px;flex:1;overflow:hidden;">
-          <div id="ps-opt-panel" style="display:none;background:#1f2335;border:1px solid #3b4261;border-radius:6px;padding:10px;flex-direction:column;flex-shrink:0;">
-            <div class="ps-opt-group">
-              <span class="ps-opt-lbl">並び:</span>
-              <div class="ps-segment" style="flex:1;">
-                <button id="ps-sort-select" class="${this.store.sortMode==="select"?"active":""}">選択順</button>
-                <button id="ps-sort-code" class="${this.store.sortMode==="code"?"active":""}">公式順</button>
-                <button id="ps-sort-preset" class="${this.store.sortMode==="preset"?"active":""}" title="スプシのI列で指定した順">カスタム</button>
+        <div id="ps-body">
+          <div id="ps-opt-panel">
+            <div class="ps-opt-head"><b>設定</b><button type="button" id="ps-opt-close" class="ps-btn ps-btn-sm">閉じる</button></div>
+            <div class="ps-sec">
+              <div class="ps-sec-title">ペンライト</div>
+              <div class="ps-seg" role="radiogroup" aria-label="ペンライトの色数">
+                <label><input type="radio" name="ps-pen-mode" value="361" ${st.penMode === "361" ? "checked" : ""}><span>361色</span></label>
+                <label><input type="radio" name="ps-pen-mode" value="56" ${st.penMode === "56" ? "checked" : ""}><span>56色</span></label>
+              </div>
+              <label class="ps-check" title="スプシの特殊カラー（F〜H列）があるアイドルは、そちらの色で登録します"><input type="checkbox" class="ps-cb" id="ps-toggle-variant" ${st.showVariant ? "checked" : ""}>特殊色を使う<span class="ps-note">（特殊カラーがあるアイドルはその色で登録）</span></label>
+            </div>
+            <div class="ps-sec">
+              <div class="ps-sec-title">まとめ（色数が多いときに）</div>
+              <div class="ps-merge" role="group" aria-label="まとめ方">
+                ${CONFIG.MERGE_OPTIONS.map(o => `<button type="button" data-mopt="${o.id}" aria-pressed="false"><span class="ps-mlabel">${o.label}</span><span class="ps-mcount" data-mcount="${o.id}">-</span></button>`).join("")}
+              </div>
+              <div class="ps-hint" id="ps-merge-hint"></div>
+            </div>
+            <div class="ps-sec">
+              <div class="ps-sec-title">登録の順番</div>
+              <div class="ps-seg" role="group" aria-label="登録の順番">
+                ${segBtn("ps-sort-select", "選んだ順", st.sortMode === "select")}
+                ${segBtn("ps-sort-code", "公式の順", st.sortMode === "code")}
+                ${segBtn("ps-sort-preset", "カスタム", st.sortMode === "preset", "スプシのI列で指定した順")}
               </div>
             </div>
-            <div class="ps-opt-group">
-              <span class="ps-opt-lbl">一覧:</span>
-              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:24px;" title="一覧に出す行">
-                ${[['brand','ブランド','#7aa2f7'],['staff','事務員','#9ece6a'],['unitcolor','ユニット','#ff9e64']].map(([id,lbl,col]) => `<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:#a9b1d6;"><input type="checkbox" id="ps-toggle-${id}" checked style="accent-color:${col};">${lbl}</label>`).join("")}
+            <div class="ps-sec">
+              <div class="ps-sec-title">一覧に出すもの</div>
+              <div class="ps-sec-row">
+                ${[["brand", "ブランド"], ["staff", "事務員"], ["unitcolor", "ユニット"]].map(([id, lbl]) => `<label class="ps-check"><input type="checkbox" class="ps-cb" id="ps-toggle-${id}" checked>${lbl}</label>`).join("")}
               </div>
             </div>
-            <div class="ps-opt-group">
-              <span class="ps-opt-lbl">ペンラ:</span>
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <div class="ps-segment" style="width:140px;">
-                  <label><input type="radio" name="ps-pen-mode" value="361" ${this.store.penMode==="361"?"checked":""}><span>361色</span></label>
-                  <label><input type="radio" name="ps-pen-mode" value="56" ${this.store.penMode==="56"?"checked":""}><span>56色</span></label>
+            <div class="ps-sec">
+              <div class="ps-sec-title">テーマ</div>
+              <div class="ps-seg" role="group" aria-label="テーマ">
+                ${[["auto", "自動"], ["dark", "ダーク"], ["light", "ライト"]].map(([k, l]) => `<button type="button" data-theme="${k}" aria-pressed="false">${l}</button>`).join("")}
+              </div>
+            </div>
+            <div class="ps-sec">
+              <div class="ps-sec-title">リストの保存・読込</div>
+              <div class="ps-sec-row" style="gap:6px;">
+                <button type="button" id="ps-export" class="ps-btn" title="リストをコードにしてコピー">${psIcon("copy")}コードをコピー</button>
+                <button type="button" id="ps-import" class="ps-btn" title="保存コードからリストを復元">${psIcon("load")}コードから読込</button>
+              </div>
+              <div class="ps-note">追加予定のリストを文字のコードにして、別の端末やあとで読み込めます。</div>
+            </div>
+            <div class="ps-sec">
+              <div class="ps-sec-title">カラーデータ</div>
+              <span id="ps-data-info" class="ps-note"></span>
+              <label class="ps-note" for="ps-sheet-id">自分のスプレッドシートを使う（ID）</label>
+              <div style="display:flex;gap:6px;"><input type="text" id="ps-sheet-id" class="ps-input" style="flex:1;min-width:0;" placeholder="空欄で標準のデータ" value="${Utils.escapeHtml(customId)}"><button type="button" id="ps-sheet-save" class="ps-btn ps-btn-primary">適用</button></div>
+            </div>
+          </div>
+          <div id="ps-main">
+            <div class="ps-queue">
+              <div class="ps-qhead">
+                <button type="button" id="ps-queue-toggle" aria-expanded="false" aria-controls="ps-queue-list">追加予定 <b id="ps-queue-count">0</b>名<span id="ps-queue-merged"></span><span id="ps-queue-arrow">${psIcon("chevron")}</span></button>
+                <div class="ps-qacts">
+                  <button type="button" id="ps-extract" class="ps-btn ps-btn-sm" title="出演者の一覧などを貼り付けて、複数名をまとめて追加">${psIcon("paste")}<span class="ps-ext-label">まとめて追加</span></button>
+                  <button type="button" id="ps-clear-queue" class="ps-btn ps-btn-sm ps-btn-danger" title="追加予定をすべて外す">全クリア</button>
                 </div>
-                <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:#a9b1d6;" title="スプシの特殊カラー（F〜H列）があるアイドルは、そちらの色で登録します"><input type="checkbox" id="ps-toggle-variant" ${this.store.showVariant?"checked":""} style="accent-color:#e0af68;">特殊色を使う</label>
               </div>
+              <div class="ps-meter" id="ps-meter" aria-hidden="true"><i></i></div>
+              <div id="ps-limit" class="ps-limit" style="display:none;" role="alert"></div>
+              <div id="ps-queue-list"></div>
             </div>
-            <div class="ps-opt-group" style="border-bottom:none;">
-              <span class="ps-opt-lbl">まとめ:</span>
-              <div class="ps-merge" style="flex:1;min-width:0;">
-                ${CONFIG.MERGE_OPTIONS.map(o => `<button data-mopt="${o.id}"><span class="ps-mlabel">${o.label}</span><span class="ps-mcount" data-mcount="${o.id}">-</span></button>`).join("")}
-              </div>
+            <div class="ps-tools">
+              <select id="ps-b" class="ps-input" aria-label="ブランド">${this.brandOptionsHTML()}</select>
+              <div class="ps-search">${psIcon("search")}<input type="search" id="ps-search" class="ps-input" placeholder="名前で検索" title="全ブランドから名前で検索" aria-label="全ブランドから名前で検索"></div>
+              <button type="button" id="ps-reload" class="ps-btn ps-btn-icon" title="データを再読み込み" aria-label="データを再読み込み">${psIcon("refresh")}</button>
             </div>
-            <div style="margin-top:2px;">
-              <div id="ps-opt-adv-toggle" style="cursor:pointer;font-size:10px;color:#8a93c0;text-align:center;padding:4px;background:#1a1b26;border-radius:4px;">▾ その他（スプシID・抽出・読込/保存）</div>
-              <div id="ps-opt-adv-panel" style="display:none;flex-direction:column;gap:4px;margin-top:6px;padding-top:6px;border-top:1px dashed #2f3549;">
-                <span id="ps-data-info" style="font-size:10px;color:#8a93c0;"></span>
-                <span style="font-size:10px;color:#9aa5ce;">カスタムスプレッドシートID:</span>
-                <div style="display:flex;gap:4px;"><input type="text" id="ps-sheet-id" class="ps-input" style="flex:1;" placeholder="空欄でデフォルト" value="${Utils.escapeHtml(customId)}"><button id="ps-sheet-save" class="ps-btn ps-btn-primary">適用</button></div>
-                <span style="font-size:10px;color:#9aa5ce;margin-top:6px;">リスト操作:</span>
-                <div style="display:flex;gap:4px;flex-wrap:wrap;">
-                  <button id="ps-extract" class="ps-btn" style="background:#3d59a1;color:#fff;" title="出演者のテキストからまとめて追加">📋抽出</button>
-                  <button id="ps-import" class="ps-btn" title="保存コードからリストを復元">読込</button>
-                  <button id="ps-export" class="ps-btn" title="リストをコードにしてコピー">保存</button>
-                </div>
-              </div>
+            <div class="ps-subtools">
+              <div id="ps-unit-chips"></div>
+              <div class="ps-sel-acts"><button type="button" id="ps-sa" class="ps-btn ps-btn-sm ps-sel-btn" title="表示中の一覧をすべて選ぶ">全選択</button><button type="button" id="ps-ca" class="ps-btn ps-btn-sm ps-btn-quiet ps-sel-btn" title="表示中の一覧の選択を外す">全解除</button></div>
             </div>
+            <div id="ps-l"><div class="ps-empty">読込中…</div></div>
           </div>
-          <div style="background:#13141c;border:1px solid #2f3549;border-radius:6px;padding:5px 8px;flex-shrink:0;">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span id="ps-queue-toggle" style="font-size:11px;color:#7dcfff;cursor:pointer;">追加予定: <b id="ps-queue-count">0</b>名<span id="ps-queue-merged" style="margin-left:4px;font-size:10px;"></span> <span id="ps-queue-arrow">▾</span></span>
-              <button id="ps-clear-queue" style="background:none;border:none;color:#f7768e;cursor:pointer;font-size:10px;margin-left:4px;">全クリア</button>
-            </div>
-            <div id="ps-limit" class="ps-limit" style="display:none;"></div>
-            <div id="ps-queue-list" style="display:none;flex-wrap:wrap;gap:4px;overflow-y:auto;margin-top:5px;padding-top:5px;border-top:1px dashed #2f3549;"></div>
-          </div>
-          <div style="display:flex;gap:4px;flex-shrink:0;">
-            <select id="ps-b" class="ps-input" style="flex:1;min-width:0;">${this.brandOptionsHTML()}</select>
-            <input type="search" id="ps-search" class="ps-input" placeholder="名前で検索" title="全ブランドから名前で検索" style="width:120px;">
-            <button id="ps-reload" class="ps-btn" title="再取得・キャッシュクリア" style="padding:4px 8px;">↻</button>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;min-height:22px;">
-            <div id="ps-unit-chips" style="display:none;flex:1;min-width:0;flex-wrap:nowrap;overflow-x:auto;gap:4px;padding:2px 0;"></div>
-            <div style="display:flex;gap:4px;margin-left:auto;flex-shrink:0;"><button id="ps-sa" class="ps-btn ps-sel-btn" title="表示中の一覧をすべて選ぶ">全選択</button><button id="ps-ca" class="ps-btn ps-sel-btn" title="表示中の一覧の選択を外す">全解除</button></div>
-          </div>
-          <div id="ps-l" style="flex:1;overflow-y:auto;background:#13141c;padding:4px;border-radius:4px;min-height:75px;">読込中...</div>
-          <button id="ps-run" class="ps-btn ps-btn-primary" style="width:100%;">リストに追加する</button>
+          <button type="button" id="ps-run" class="ps-btn ps-btn-primary">リストに追加する</button>
         </div>
       </div>
-      
+
       <!-- モーダル・通知エリア -->
-      <div id="ps-toast-container"></div>
-      <div id="ps-modal-overlay">
-        <div id="ps-modal">
+      <div id="ps-toast-container" class="ps-root"></div>
+      <div id="ps-modal-overlay" class="ps-root">
+        <div id="ps-modal" role="dialog" aria-modal="true" aria-labelledby="ps-modal-title">
           <div class="ps-modal-title" id="ps-modal-title"></div>
           <div class="ps-modal-msg" id="ps-modal-msg"></div>
-          <textarea class="ps-modal-input" id="ps-modal-input" rows="3" style="resize:none;"></textarea>
+          <textarea class="ps-modal-input" id="ps-modal-input" rows="4"></textarea>
+          <div class="ps-modal-kbd" id="ps-modal-kbd">Ctrl（⌘）+ Enter でも決定できます</div>
           <div class="ps-modal-actions">
-            <button class="ps-btn" id="ps-modal-cancel">キャンセル</button>
-            <button class="ps-btn ps-btn-primary" id="ps-modal-ok">OK</button>
+            <button type="button" class="ps-btn" id="ps-modal-cancel">キャンセル</button>
+            <button type="button" class="ps-btn ps-btn-primary" id="ps-modal-ok">OK</button>
           </div>
         </div>
       </div>
@@ -995,8 +1162,9 @@ class UIManager {
       radios: document.querySelectorAll('input[name="ps-pen-mode"]'),
       mergeBtns: document.querySelectorAll("#ps-m [data-mopt]"), limit: get("ps-limit"), qMerged: get("ps-queue-merged"),
       sort: { select: get("ps-sort-select"), code: get("ps-sort-code"), preset: get("ps-sort-preset") },
-      optBtn: get("ps-toggle-opt"), optPanel: get("ps-opt-panel"), advBtn: get("ps-opt-adv-toggle"), advPanel: get("ps-opt-adv-panel"),
-      sid: get("ps-sheet-id"), save: get("ps-sheet-save"), qTog: get("ps-queue-toggle"), qArr: get("ps-queue-arrow"), chips: get("ps-unit-chips"),
+      optBtn: get("ps-toggle-opt"), optPanel: get("ps-opt-panel"), optClose: get("ps-opt-close"), mergeHint: get("ps-merge-hint"), meter: get("ps-meter"),
+      themeBtns: document.querySelectorAll("#ps-m [data-theme]"),
+      sid: get("ps-sheet-id"), save: get("ps-sheet-save"), qTog: get("ps-queue-toggle"), chips: get("ps-unit-chips"),
       sa: get("ps-sa"), ca: get("ps-ca"), dataInfo: get("ps-data-info")
     };
   }
@@ -1015,12 +1183,15 @@ class UIManager {
     e.min.onclick = () => { this.savedHeight = e.m.style.height; e.m.style.display = "none"; e.fab.style.display = "flex"; };
     e.fab.onclick = () => { e.fab.style.display = "none"; e.m.style.display = "flex"; e.m.style.height = this.savedHeight || "750px"; };
     
-    e.optBtn.onclick = () => { const show = e.optPanel.style.display === "flex"; e.optPanel.style.display = show ? "none" : "flex"; e.optBtn.style.color = show ? "#a9b1d6" : "#7aa2f7"; };
-    e.advBtn.onclick = () => { const show = e.advPanel.style.display === "flex"; e.advPanel.style.display = show ? "none" : "flex"; e.advBtn.textContent = show ? "▾ その他（スプシID・抽出・読込/保存）" : "▴ その他を閉じる"; };
-    e.qTog.onclick = () => { this.isQueueOpen = !this.isQueueOpen; e.qList.style.display = this.isQueueOpen ? "flex" : "none"; e.qArr.textContent = this.isQueueOpen ? "▴" : "▾"; };
+    // 設定は一覧の代わりに表示する（一覧が押しつぶされない）。閉じると元の画面に戻る
+    const setOpt = open => { e.m.classList.toggle("opt-open", open); e.optBtn.setAttribute("aria-expanded", open); if (open) e.optPanel.scrollTop = 0; };
+    e.optBtn.onclick = () => setOpt(!e.m.classList.contains("opt-open"));
+    e.optClose.onclick = () => { setOpt(false); e.optBtn.focus(); };
+    e.qTog.onclick = () => this.setQueueOpen(!this.isQueueOpen);
+    e.themeBtns.forEach(b => b.onclick = () => { localStorage.setItem(CONFIG.KEYS.THEME, b.dataset.theme); this.applyTheme(); });
     
     Object.entries(e.sort).forEach(([mode, btn]) => {
-      btn.onclick = () => { s.setPref("sortMode", mode, "SORT"); Object.values(e.sort).forEach(b => b.classList.remove("active")); btn.classList.add("active"); this.renderQueue(); };
+      btn.onclick = () => { s.setPref("sortMode", mode, "SORT"); Object.values(e.sort).forEach(b => { b.classList.toggle("active", b === btn); b.setAttribute("aria-pressed", b === btn); }); this.renderQueue(); };
     });
     
     e.toggles.brand.onchange = ev => { s.showBrand = ev.target.checked; this.renderList(); };
@@ -1134,7 +1305,7 @@ class UIManager {
     });
 
     e.ext.onclick = async () => {
-      const input = await this.openModal({ title: "【自動抽出機能】", message: "公式サイト等のテキストを貼り付けてください。", isPrompt: true, placeholder: "テキストを入力..." });
+      const input = await this.openModal({ title: "まとめて追加", message: "出演者の一覧など、名前が入った文章をそのまま貼り付けてください。\n見つかった人を全員、追加予定に入れます（区切りは改行・読点・スペースなど何でもOK）。", isPrompt: true, placeholder: "例：\n天海春香、如月千早、春日未来\n（公式サイトの出演者欄をコピーして貼り付けてもOK）", okText: "まとめて追加" });
       if (input) await this.extractFromText(input);
     };
 
@@ -1142,11 +1313,11 @@ class UIManager {
       const data = s.getSortedSelectedList(this.site.getRankCalculator());
       if (!data.length) return this.showToast("エクスポートするリストがありません。", true);
       navigator.clipboard.writeText(btoa(encodeURIComponent(JSON.stringify({ showVariant: s.showVariant, penMode: s.penMode, items: data }))))
-        .then(() => this.showToast("リストのコードをコピーしました！")).catch(() => this.showToast("コピーに失敗しました。", true));
+        .then(() => this.showToast("リストのコードをコピーしました。")).catch(() => this.showToast("コピーに失敗しました。", true));
     };
 
     e.imp.onclick = async () => {
-      const str = await this.openModal({ title: "【リスト読込】", message: "エクスポートしたコードを貼り付けてください:", isPrompt: true });
+      const str = await this.openModal({ title: "コードから読込", message: "「コードをコピー」で保存しておいたコードを貼り付けてください。\n今の追加予定は、読み込んだリストに置き換わります。", isPrompt: true, okText: "読み込む" });
       if (!str) return;
       try {
         const dec = JSON.parse(decodeURIComponent(atob(str)));
@@ -1156,7 +1327,7 @@ class UIManager {
           s.clearSelection();
           items.forEach(it => { if (it?.n && it?.brand) { s.counter = Math.max(s.counter, it.selectOrder || 0); s.selected.set(`${it.brand}:${it.n}`, it); } });
           this.renderQueue(); this.renderList(); 
-          this.showToast("リストを読み込みました！");
+          this.showToast("リストを読み込みました。");
         } else this.showToast("有効なデータが見つかりません。", true);
       } catch (err) { this.showToast("無効なコードです。", true); }
     };
@@ -1165,6 +1336,14 @@ class UIManager {
       if (this.app.running) { this.app.abortRequested = true; e.run.textContent = "中断しています..."; return; }
       this.app.executeAutoAdd();
     };
+  }
+
+  // 追加予定の一覧を開く／閉じる
+  setQueueOpen(open) {
+    const e = this.els;
+    this.isQueueOpen = open;
+    e.qList.style.display = open ? "flex" : "none";
+    e.qTog.setAttribute("aria-expanded", open);
   }
 
   // 検索欄の入力。文字があれば全ブランド横断、空なら元のブランドに戻る
@@ -1187,7 +1366,7 @@ class UIManager {
     // 「、」「,」改行などで区切られた出演者リストなら、名前ごとに照合結果を確認する
     const tokens = String(input).split(/[、,，\n\r\t／\/|｜]+/).map(raw => ({ raw: raw.trim(), key: Utils.normalizeText(raw) })).filter(t => t.key.length > 1);
     const isList = tokens.length >= 2 && tokens.every(t => t.key.length <= 20);
-    const orig = e.ext.textContent; e.ext.textContent = "⏳抽出中..."; e.ext.disabled = true; let added = 0;
+    const lbl = e.ext.querySelector(".ps-ext-label"), orig = lbl.textContent; lbl.textContent = "追加中…"; e.ext.disabled = true; let added = 0;
     try {
       await this.app.ensureAllLoaded();
       const addedNames = new Set([...s.selected.values()].map(it => it.n));
@@ -1204,11 +1383,7 @@ class UIManager {
       });
 
       // 抽出で1名以上追加されたら、「追加予定」のリストだけ自動で開いて確認しやすくする（ブランドタブは切り替えない）
-      if (added > 0 && !this.isQueueOpen) {
-        this.isQueueOpen = true;
-        e.qList.style.display = "flex";
-        e.qArr.textContent = "▴";
-      }
+      if (added > 0 && !this.isQueueOpen) this.setQueueOpen(true);
       this.renderQueue(); this.renderList();
       const unmatched = isList ? tokens.filter(t => !candidates.some(c => t.key.includes(c.key))).map(t => t.raw) : [];
       if (unmatched.length) {
@@ -1217,11 +1392,11 @@ class UIManager {
           message: `${added}名を追加しました。\n\n以下の名前はスプレッドシートに見つかりませんでした（未登録・表記ゆれの可能性があります）：\n${unmatched.map(n => `・${n}`).join("\n")}`,
           hideCancel: true
         });
-      } else if (added > 0) this.showToast(`🎉 抽出完了！\n合計 ${added} 名を追加しました。`);
+      } else if (added > 0) this.showToast(`${added}名をまとめて追加予定に入れました。`);
       else this.showToast("一致するアイドルが見つかりませんでした。", true);
     } catch (err) {
-      this.showToast("抽出処理中にエラーが発生しました。", true);
-    } finally { e.ext.textContent = orig; e.ext.disabled = false; }
+      this.showToast("まとめて追加の途中でエラーが発生しました。", true);
+    } finally { lbl.textContent = orig; e.ext.disabled = false; }
     return added;
   }
 
@@ -1230,7 +1405,8 @@ class UIManager {
     if (this.queueReady) s.saveSelection();   // 起動時の復元が終わるまでは保存しない（前回の分を空で上書きしないため）
     e.qCount.textContent = s.selected.size;
     if (!s.selected.size) {
-      e.qMerged.textContent = ""; e.qList.innerHTML = `<span style="color:#8a93c0;font-size:10px;">未選択</span>`;
+      e.qMerged.textContent = ""; e.qMerged.className = ""; this.setMeter(0);
+      e.qList.innerHTML = `<span class="ps-qempty">まだ選ばれていません。下の一覧で1人ずつ選ぶか、「まとめて追加」で出演者の一覧を貼り付けて一度に入れられます。</span>`;
       e.limit.style.display = "none"; this.renderMergeCounts(null); this.updateRunLabel(0, 0);
       return;
     }
@@ -1240,8 +1416,9 @@ class UIManager {
 
     // 色数と上限を常に表示（上限-5を超えたら黄、上限超えで赤）
     const colorCount = groups.filter(g => g.pen !== "--").length, max = CONFIG.MAX_COLORS;
-    e.qMerged.textContent = `→ ${colorCount}色 / ${max}`;
-    e.qMerged.style.color = colorCount > max ? "#f7768e" : colorCount > max - 5 ? "#e0af68" : "#9ece6a";
+    e.qMerged.textContent = `・ ${colorCount} / ${max}色`;
+    e.qMerged.className = colorCount > max ? "over" : colorCount > max - 5 ? "near" : "ok";
+    this.setMeter(colorCount);
 
     // 選択肢ごとの色数（設定画面のボタンに表示）と、上限を超えたときの案内
     const counts = this.mergeCounts(sorted, rank);
@@ -1250,8 +1427,8 @@ class UIManager {
       const sug = this.suggestMerge(counts);
       e.limit.style.display = "block";
       e.limit.innerHTML = sug
-        ? `⚠️ ${max}色を超えています。<button class="ps-btn" data-apply="${sug.opt.id}">「${sug.opt.label}」でまとめる（${sug.count}色）</button>`
-        : `⚠️ ${max}色を超えています。まとめても収まらないので、選択を減らしてください。`;
+        ? `${psIcon("alert")}<span>${max}色を超えています。</span><button type="button" class="ps-btn ps-btn-primary" data-apply="${sug.opt.id}">「${sug.opt.label}」でまとめる（${sug.count}色）</button>`
+        : `${psIcon("alert")}<span>${max}色を超えています。まとめても収まらないので、選択を減らしてください。</span>`;
     } else e.limit.style.display = "none";
     this.updateRunLabel(colorCount, sorted.filter(it => s.getActivePen(it) !== "--").length);
 
@@ -1260,8 +1437,8 @@ class UIManager {
     const badge = (it, withHandle) => {
       const aCol = Utils.safeColor(s.getActiveColor(it)), aPen = Utils.escapeHtml(s.getActivePen(it)), isSkip = aPen === "--";
       const key = Utils.escapeHtml(`${it.brand}:${it.n}`), n = Utils.escapeHtml(it.n);
-      const handle = withHandle ? `<span class="ps-drag-handle ${canDrag ? '' : 'disabled'}" title="${canDrag ? 'ドラッグして移動' : '自動ソート中は手動移動できません'}">⠿</span>` : "";
-      return `<span class="ps-badge ps-drag-item" data-key="${key}" ${canDrag ? 'draggable="true"' : ''} style="${isSkip ? 'opacity:0.6;' : ''}">${handle}<span class="ps-sw" style="width:7px;height:7px;background:${aCol};"></span><span style="${isSkip ? 'text-decoration:line-through;' : ''}">${n}</span><span class="ps-code">(${aPen})</span><button data-del="${key}" style="background:none;border:none;color:#f7768e;cursor:pointer;padding:0 2px;">✕</button></span>`;
+      const handle = withHandle ? `<span class="ps-drag-handle ${canDrag ? '' : 'disabled'}" title="${canDrag ? 'ドラッグして移動' : '並びが「選んだ順」以外、またはまとめ中は手動で動かせません'}">${psIcon("grip")}</span>` : "";
+      return `<span class="ps-badge ps-drag-item ${isSkip ? 'skip' : ''}" data-key="${key}" ${canDrag ? 'draggable="true"' : ''}>${handle}<span class="ps-sw" style="background:${aCol};"></span><span class="ps-bname">${n}</span><span class="ps-code">${aPen}</span><button type="button" class="ps-del" data-del="${key}" title="外す" aria-label="${n}を外す">${psIcon("close")}</button></span>`;
     };
 
     // まとめなし: 1人ずつ（並べ替え可）
@@ -1273,14 +1450,22 @@ class UIManager {
       const rawKey = `${g.members[0].brand}:${g.members[0].n}`, open = this.openGroups.has(rawKey);
       const repItem = g.members.find(m => s.getActivePen(m) === g.pen) || g.members[0];
       return `<div class="ps-group ${open ? 'open' : ''}">
-        <div class="ps-group-head" data-gtoggle="${Utils.escapeHtml(rawKey)}">
+        <button type="button" class="ps-group-head" data-gtoggle="${Utils.escapeHtml(rawKey)}" aria-expanded="${open}">
           <span class="ps-sw" style="background:${Utils.safeColor(s.getActiveColor(repItem))};"></span>
-          <span class="ps-group-name">${Utils.escapeHtml(g.n)}</span><span class="ps-code">(${Utils.escapeHtml(g.pen)})</span>
-          <span class="ps-group-meta">${g.label ? Utils.escapeHtml(g.label) + "・" : ""}${g.members.length}名 ${open ? "▴" : "▾"}</span>
-        </div>
+          <span class="ps-group-name">${Utils.escapeHtml(g.n)}</span><span class="ps-code">${Utils.escapeHtml(g.pen)}</span>
+          <span class="ps-group-meta">${g.label ? Utils.escapeHtml(g.label) + "・" : ""}${g.members.length}名${psIcon("chevron")}</span>
+        </button>
         ${open ? `<div class="ps-group-body">${g.members.map(m => badge(m, false)).join("")}</div>` : ""}
       </div>`;
     }).join("");
+  }
+
+  // 追加予定の色数を、上限に対するバーで見せる
+  setMeter(colorCount) {
+    const m = this.els.meter; if (!m) return;
+    const max = CONFIG.MAX_COLORS;
+    m.firstElementChild.style.width = `${Math.min(100, colorCount / max * 100)}%`;
+    m.classList.toggle("over", colorCount > max); m.classList.toggle("near", colorCount <= max && colorCount > max - 5);
   }
 
   // 設定画面の「まとめ」の各ボタンに、まとめた結果の色数を出す（未選択なら「-」）
@@ -1315,15 +1500,15 @@ class UIManager {
     const units = this.store.getUnits();
     if (!units.length) { this.els.chips.style.display = "none"; this.els.chips.innerHTML = ""; this.store.selectedUnit = ""; return; }
     this.els.chips.style.display = "flex";
-    this.els.chips.innerHTML = `<span class="ps-chip ${!this.store.selectedUnit ? 'active' : ''}" data-unit="">全て</span>` + units.map(u => {
-      const eU = Utils.escapeHtml(u); return `<span class="ps-chip ${this.store.selectedUnit === u ? 'active' : ''}" data-unit="${eU}">${eU}</span>`;
+    this.els.chips.innerHTML = `<button type="button" class="ps-chip ${!this.store.selectedUnit ? 'active' : ''}" data-unit="" aria-pressed="${!this.store.selectedUnit}">全て</button>` + units.map(u => {
+      const eU = Utils.escapeHtml(u), on = this.store.selectedUnit === u; return `<button type="button" class="ps-chip ${on ? 'active' : ''}" data-unit="${eU}" aria-pressed="${on}">${eU}</button>`;
     }).join("");
     this.els.chips.querySelectorAll(".ps-chip").forEach(c => c.onclick = () => { this.store.selectedUnit = c.getAttribute("data-unit"); this.renderUnitChips(); this.renderList(); });
   }
 
   renderList() {
     const list = this.store.getVisibleList(), s = this.store;
-    if (!list.length) { this.els.list.innerHTML = `<span style="color:#f7768e;display:block;padding:6px 0;">一致する項目がありません</span>`; return; }
+    if (!list.length) { this.els.list.innerHTML = `<div class="ps-empty">一致する項目がありません。${s.searchQuery ? "名前の一部だけでも検索できます。" : ""}</div>`; return; }
     const searching = !!s.searchQuery;
     let lastBrand = null;
     this.els.list.innerHTML = list.map(it => {
@@ -1333,9 +1518,9 @@ class UIManager {
       const key = `${it.brand}:${it.n}`, escKey = Utils.escapeHtml(key), n = Utils.escapeHtml(it.n);
       const isChk = s.selected.has(key), isFav = s.favorites.has(key);
       const tag = it.role === "brand" ? `<span class="ps-tag ps-tag-brand">ブランド</span>` : it.role === "staff" ? `<span class="ps-tag ps-tag-staff">事務員</span>` : it.role === "unit_color" ? `<span class="ps-tag ps-tag-unit">ユニット</span>` : "";
-      const uTag = it.unit && !CONFIG.EXCLUDE_ROLES.includes(it.unit) && it.role === "idol" && !it.n.includes(it.unit) ? `<span style="font-size:9px;color:#8a93c0;margin-left:4px;">[${Utils.escapeHtml(it.unit)}]</span>` : "";
-      const star = `<button type="button" class="ps-star-btn ${isFav ? 'active' : ''}" data-fav="${escKey}" title="推しピン留め">${isFav ? '★' : '☆'}</button>`;
-      return head + `<div class="ps-row ${isChk ? 'selected' : ''}" data-rowkey="${escKey}" style="${isSkip ? 'opacity:0.6;' : ''}"><input type="checkbox" data-key="${escKey}" class="ps-k" ${isChk ? "checked" : ""} ${isSkip ? 'disabled title="未設定"' : ''}>${star}<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${aCol};border:1px solid rgba(255,255,255,0.4);flex-shrink:0;"></span><span class="ps-name-label" data-key="${escKey}" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; ${isSkip ? 'text-decoration:line-through;opacity:0.6;' : ''}">${n}${tag}${uTag}</span><span style="color:${isSkip ? '#f7768e' : '#7dcfff'};font-family:monospace;font-weight:bold;font-size:12px;flex-shrink:0;margin-left:4px;">${aPen}</span></div>`;
+      const uTag = it.unit && !CONFIG.EXCLUDE_ROLES.includes(it.unit) && it.role === "idol" && !it.n.includes(it.unit) ? `<span class="ps-utag">${Utils.escapeHtml(it.unit)}</span>` : "";
+      const star = `<button type="button" class="ps-star-btn ${isFav ? 'active' : ''}" data-fav="${escKey}" title="${isFav ? 'ピン留めを外す' : '推しをピン留め（一覧の上に表示）'}" aria-label="${n}をピン留め" aria-pressed="${isFav}">${psIcon("star")}</button>`;
+      return head + `<div class="ps-row ${isChk ? 'selected' : ''} ${isSkip ? 'skip' : ''}" data-rowkey="${escKey}"><input type="checkbox" data-key="${escKey}" class="ps-k" aria-label="${n}" ${isChk ? "checked" : ""} ${isSkip ? 'disabled title="ペンラコードが未設定です"' : ''}>${star}<span class="ps-swatch" style="background:${aCol};"></span><span class="ps-name-label" data-key="${escKey}">${n}${tag}${uTag}</span><span class="ps-pen ${isSkip ? 'none' : ''}">${aPen}</span></div>`;
     }).join("");
   }
 }
@@ -1366,7 +1551,7 @@ class App {
   }
   async loadData(force = false) {
     if (!this.store.cache[this.store.currentBrand] || force) {
-      this.ui.els.list.innerHTML = `<span style="color:#aaa;">${force ? '再取得中...' : '読込中...'}</span>`;
+      this.ui.els.list.innerHTML = `<div class="ps-empty">${force ? '再取得中…' : '読込中…'}</div>`;
       this.store.cache[this.store.currentBrand] = await DataFetcher.fetch(this.store.currentBrand, force);
       // colors.json のブランド一覧が変わっていたら、選択肢を作り直す
       if (DataFetcher.sheetsChanged) {
@@ -1379,7 +1564,7 @@ class App {
     this.ui.renderUnitChips(); this.ui.renderList(); this.ui.updateDataInfo();
     if (DataFetcher.lastError && !this.store.cache[this.store.currentBrand]?.length) {
       this.store.cache[this.store.currentBrand] = null; // 次回また取得を試みる
-      this.ui.els.list.innerHTML = `<span style="color:#f7768e;display:block;padding:6px 0;">データを取得できませんでした。通信状況を確認して ↻ で再試行してください。</span>`;
+      this.ui.els.list.innerHTML = `<div class="ps-empty err">データを取得できませんでした。通信状況を確認して、検索欄の右の再読み込みボタンで試してください。</div>`;
     }
   }
   // 全ブランドのデータを揃える（横断検索・抽出用。同時に呼ばれても取得は1回）
@@ -1451,7 +1636,7 @@ class App {
       const sug = this.ui.suggestMerge(this.ui.mergeCounts(targets, rank));
       const tip = sug ? `設定の「まとめ」を「${sug.opt.label}」にすると、${sug.count}色になり上限に収まります。` : "まとめても上限に収まらないので、選択メンバーを減らしてください。";
       await this.ui.openModal({
-        title: "⚠️ 登録上限オーバー",
+        title: "登録できる色数を超えています",
         message: `一度に登録できるのは「${CONFIG.MAX_COLORS}色」までです。\n（現在: ${validCount}色 追加予定）\n\n※${tip}`,
         hideCancel: true
       });
@@ -1490,7 +1675,7 @@ class App {
       for (let i = 0; i < pTargets.length; i++) {
         if (this.abortRequested) { aborted = true; break; }
         const it = pTargets[i], activePen = it.pen;
-        run.textContent = `■ 中断 [${i + 1}/${pTargets.length}] ${it.n.substring(0, 12)}${it.n.length > 12 ? "..." : ""}`;
+        run.textContent = `中断する（${i + 1}/${pTargets.length}）${it.n.substring(0, 12)}${it.n.length > 12 ? "…" : ""}`;
         if (activePen === "--") { skipped.push(`・${it.n} (コード未設定)`); continue; }
 
         const btn = site.getButton(activePen);
@@ -1537,7 +1722,7 @@ class App {
     if (notes.length) {
       await this.ui.openModal({ title: "お知らせ", message: notes.join("\n\n"), hideCancel: true });
     } else {
-      this.ui.showToast(`🎉 処理が完了しました！`);
+      this.ui.showToast(`登録が完了しました（${count}色）`);
     }
     // スマホではパネルが画面を覆うので、完了後は自動で縮めて公式サイトの結果を見せる
     if (!aborted && window.matchMedia?.("(max-width: 768px)").matches) this.ui.els.min.click();

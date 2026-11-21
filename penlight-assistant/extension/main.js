@@ -24,7 +24,7 @@ class App {
   }
   async loadData(force = false) {
     if (!this.store.cache[this.store.currentBrand] || force) {
-      this.ui.els.list.innerHTML = `<span style="color:#aaa;">${force ? '再取得中...' : '読込中...'}</span>`;
+      this.ui.els.list.innerHTML = `<div class="ps-empty">${force ? '再取得中…' : '読込中…'}</div>`;
       this.store.cache[this.store.currentBrand] = await DataFetcher.fetch(this.store.currentBrand, force);
       // colors.json のブランド一覧が変わっていたら、選択肢を作り直す
       if (DataFetcher.sheetsChanged) {
@@ -37,7 +37,7 @@ class App {
     this.ui.renderUnitChips(); this.ui.renderList(); this.ui.updateDataInfo();
     if (DataFetcher.lastError && !this.store.cache[this.store.currentBrand]?.length) {
       this.store.cache[this.store.currentBrand] = null; // 次回また取得を試みる
-      this.ui.els.list.innerHTML = `<span style="color:#f7768e;display:block;padding:6px 0;">データを取得できませんでした。通信状況を確認して ↻ で再試行してください。</span>`;
+      this.ui.els.list.innerHTML = `<div class="ps-empty err">データを取得できませんでした。通信状況を確認して、検索欄の右の再読み込みボタンで試してください。</div>`;
     }
   }
   // 全ブランドのデータを揃える（横断検索・抽出用。同時に呼ばれても取得は1回）
@@ -109,7 +109,7 @@ class App {
       const sug = this.ui.suggestMerge(this.ui.mergeCounts(targets, rank));
       const tip = sug ? `設定の「まとめ」を「${sug.opt.label}」にすると、${sug.count}色になり上限に収まります。` : "まとめても上限に収まらないので、選択メンバーを減らしてください。";
       await this.ui.openModal({
-        title: "⚠️ 登録上限オーバー",
+        title: "登録できる色数を超えています",
         message: `一度に登録できるのは「${CONFIG.MAX_COLORS}色」までです。\n（現在: ${validCount}色 追加予定）\n\n※${tip}`,
         hideCancel: true
       });
@@ -148,7 +148,7 @@ class App {
       for (let i = 0; i < pTargets.length; i++) {
         if (this.abortRequested) { aborted = true; break; }
         const it = pTargets[i], activePen = it.pen;
-        run.textContent = `■ 中断 [${i + 1}/${pTargets.length}] ${it.n.substring(0, 12)}${it.n.length > 12 ? "..." : ""}`;
+        run.textContent = `中断する（${i + 1}/${pTargets.length}）${it.n.substring(0, 12)}${it.n.length > 12 ? "…" : ""}`;
         if (activePen === "--") { skipped.push(`・${it.n} (コード未設定)`); continue; }
 
         const btn = site.getButton(activePen);
@@ -195,7 +195,7 @@ class App {
     if (notes.length) {
       await this.ui.openModal({ title: "お知らせ", message: notes.join("\n\n"), hideCancel: true });
     } else {
-      this.ui.showToast(`🎉 処理が完了しました！`);
+      this.ui.showToast(`登録が完了しました（${count}色）`);
     }
     // スマホではパネルが画面を覆うので、完了後は自動で縮めて公式サイトの結果を見せる
     if (!aborted && window.matchMedia?.("(max-width: 768px)").matches) this.ui.els.min.click();

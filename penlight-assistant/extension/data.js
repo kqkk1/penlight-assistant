@@ -160,7 +160,7 @@ class DataFetcher {
   // colors.json の取得（同時に呼ばれても1回だけ取りに行く）。取れなければ、期限切れでも前回のものを使う。どちらもなければ null
   static loadBundle(force = false) {
     if (!force && DataFetcher._bundle) return Promise.resolve(DataFetcher._bundle);
-    if (!force && DataFetcher._bundleFailed) return Promise.resolve(null);   // この画面で一度失敗したら、↻ を押すまでスプシ直読みで動かす
+    if (!force && DataFetcher._bundleFailed) return Promise.resolve(null);   // この画面で一度失敗したら、再読み込みボタンを押すまでスプシ直読みで動かす
     if (DataFetcher._bundleLoading) return DataFetcher._bundleLoading;
     DataFetcher._bundleLoading = (async () => {
       let cached = null;

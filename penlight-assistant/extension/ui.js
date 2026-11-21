@@ -5,6 +5,26 @@
  */
 "use strict";
 
+// 線のアイコン（絵文字の代わり。文字と同じ色で描かれ、どのOS・テーマでも同じ見た目になる）
+const PS_ICONS = {
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>',
+  minus: '<path d="M6 12h12"/>',
+  close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+  chevron: '<path d="M6.5 9.5l5.5 5.5 5.5-5.5"/>',
+  refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/>',
+  paste: '<rect x="6" y="4.5" width="12" height="16" rx="2.5"/><path d="M9.5 4.5V3.5h5v1M9.5 10h5M9.5 13.5h5M9.5 17h3"/>',
+  copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/>',
+  load: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>',
+  star: '<path d="M12 3.8l2.5 5.1 5.6.8-4 3.9.9 5.6-5-2.6-5 2.6.9-5.6-4-3.9 5.6-.8z"/>',
+  grip: '<path d="M9 6.5h.01M15 6.5h.01M9 12h.01M15 12h.01M9 17.5h.01M15 17.5h.01" stroke-width="3"/>',
+  check: '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/>',
+  alert: '<path d="M12 4.5l8.5 15h-17z"/><path d="M12 10.5v4M12 17h.01"/>',
+  bell: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+  pen: '<path d="M9.5 10.5h5V20a1.5 1.5 0 0 1-1.5 1.5h-2A1.5 1.5 0 0 1 9.5 20z"/><path d="M10 10.5V7a2 2 0 0 1 4 0v3.5"/><path d="M12 2v1.2M6.8 3.6l.9.9M17.2 3.6l-.9.9"/>'
+};
+const psIcon = (name, cls = "") => `<svg class="ps-ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PS_ICONS[name]}</svg>`;
+
 class UIManager {
   constructor(app, store, site) {
     this.app = app; this.store = store; this.site = site;
@@ -14,7 +34,7 @@ class UIManager {
 
   inject() {
     if (document.getElementById("ps-m")) return false;
-    this.injectStyles(); this.buildHTML(); this.cacheElements(); this.bindEvents(); this.updateMergeUI(); this.checkUpdate();
+    this.injectStyles(); this.buildHTML(); this.cacheElements(); this.applyTheme(); this.bindEvents(); this.updateMergeUI(); this.checkUpdate();
     return true;
   }
 
@@ -54,8 +74,20 @@ class UIManager {
     e.mergeBtns.forEach(b => {
       const opt = CONFIG.MERGE_OPTIONS.find(o => o.id === b.dataset.mopt);
       b.classList.toggle("active", opt === cur);
+      b.setAttribute("aria-pressed", opt === cur);
       b.title = this.mergeHint(opt);
     });
+    if (e.mergeHint) e.mergeHint.textContent = this.mergeHint(cur);
+  }
+
+  // テーマ（自動・ダーク・ライト）。自動は端末の設定に合わせる
+  applyTheme() {
+    const pref = localStorage.getItem(CONFIG.KEYS.THEME) || "auto";
+    const mq = window.matchMedia?.("(prefers-color-scheme: light)");
+    const t = pref === "auto" ? (mq?.matches ? "light" : "dark") : pref;
+    ["ps-m", "ps-fab", "ps-modal-overlay", "ps-toast-container"].forEach(id => document.getElementById(id)?.setAttribute("data-ps-theme", t));
+    this.els.themeBtns?.forEach(b => { const on = b.dataset.theme === pref; b.classList.toggle("active", on); b.setAttribute("aria-pressed", on); });
+    if (mq && !this._themeWatch) { this._themeWatch = true; mq.addEventListener?.("change", () => { if ((localStorage.getItem(CONFIG.KEYS.THEME) || "auto") === "auto") this.applyTheme(); }); }
   }
 
   async checkUpdate() {
@@ -72,9 +104,9 @@ class UIManager {
         if (latestVer) localStorage.setItem(KEY, JSON.stringify({ t: Date.now(), v: latestVer }));
       }
       if (latestVer && Utils.compareVersion(latestVer, CURRENT_VERSION) > 0) {
-        const b = document.createElement("div");
-        b.style.cssText = "background:#ff9e64;color:#15161e;font-weight:bold;font-size:11px;padding:6px;text-align:center;cursor:pointer;border-radius:4px;margin-bottom:6px;flex-shrink:0;";
-        b.textContent = `📢 新バージョン(v${latestVer})が公開されています！クリックして更新ページへ`;
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "ps-update";
+        b.innerHTML = `${psIcon("bell")}<span>新しいバージョン（v${Utils.escapeHtml(latestVer)}）があります。押すと更新ページを開きます</span>`;
         b.onclick = () => window.open(`https://github.com/${CONFIG.GITHUB_REPO}/releases/latest`, "_blank");
         this.els.body.insertBefore(b, this.els.body.firstChild);
       }
@@ -86,7 +118,9 @@ class UIManager {
     if (!container) return;
     const el = document.createElement("div");
     el.className = `ps-toast ${isError ? 'error' : ''}`;
-    el.textContent = message;
+    el.setAttribute("role", isError ? "alert" : "status");
+    el.innerHTML = psIcon(isError ? "alert" : "check");
+    const t = document.createElement("span"); t.textContent = message; el.appendChild(t);
     container.appendChild(el);
     setTimeout(() => el.classList.add("show"), 10);
     setTimeout(() => {
@@ -104,6 +138,8 @@ class UIManager {
       const inputEl = document.getElementById("ps-modal-input");
       const btnCancel = document.getElementById("ps-modal-cancel");
       const btnOk = document.getElementById("ps-modal-ok");
+      const kbd = document.getElementById("ps-modal-kbd");
+      const opener = document.activeElement;
 
       titleEl.textContent = opts.title || "お知らせ";
       msgEl.textContent = opts.message || "";
@@ -112,28 +148,36 @@ class UIManager {
         inputEl.style.display = "block";
         inputEl.placeholder = opts.placeholder || "";
         inputEl.value = "";
+        kbd.style.display = "block";
       } else {
         inputEl.style.display = "none";
+        kbd.style.display = "none";
       }
 
       btnCancel.style.display = opts.hideCancel ? "none" : "block";
       btnOk.textContent = opts.okText || "OK";
       btnCancel.textContent = opts.cancelText || "キャンセル";
 
+      const onKey = ev => {
+        if (ev.key === "Escape") { ev.preventDefault(); close(opts.hideCancel ? true : null); }
+        else if (ev.key === "Enter" && (!opts.isPrompt || ev.ctrlKey || ev.metaKey) && !ev.isComposing) { ev.preventDefault(); btnOk.click(); }
+      };
       const close = (val) => {
+        overlay.removeEventListener("keydown", onKey);
         overlay.style.opacity = "0";
         modal.classList.remove("show");
-        setTimeout(() => { overlay.style.display = "none"; resolve(val); }, 200);
+        setTimeout(() => { overlay.style.display = "none"; if (opener && document.contains(opener)) opener.focus?.({ preventScroll: true }); resolve(val); }, 200);
       };
 
       btnCancel.onclick = () => close(null);
       btnOk.onclick = () => close(opts.isPrompt ? inputEl.value : true);
+      overlay.addEventListener("keydown", onKey);
 
       overlay.style.display = "flex";
       setTimeout(() => {
         overlay.style.opacity = "1";
         modal.classList.add("show");
-        if (opts.isPrompt) inputEl.focus();
+        (opts.isPrompt ? inputEl : btnOk).focus();
       }, 10);
     });
   }
@@ -146,7 +190,7 @@ class UIManager {
 
   // ブランドの選択肢。colors.json のシート一覧が変わったときにも呼ばれる（表示中のブランドがなくなったら先頭へ）
   brandOptionsHTML() {
-    return CONFIG.SHEETS.map(k => `<option value="${Utils.escapeHtml(k)}">${Utils.escapeHtml(k)}</option>`).join("") + `<option value="__search" hidden>🔍 全ブランドから検索中</option>`;
+    return CONFIG.SHEETS.map(k => `<option value="${Utils.escapeHtml(k)}">${Utils.escapeHtml(k)}</option>`).join("") + `<option value="__search" hidden>全ブランドから検索中</option>`;
   }
   renderBrandOptions() {
     const s = this.store;
@@ -157,95 +201,110 @@ class UIManager {
 
   buildHTML() {
     const customId = localStorage.getItem(CONFIG.KEYS.ID) || "";
-    document.body.insertAdjacentHTML("beforeend", `<div id="ps-fab" style="display:none;" title="アシストを開く">✨</div>
-      <div id="ps-m">
+    const st = this.store;
+    const segBtn = (id, label, on, title = "") => `<button type="button" id="${id}" class="${on ? "active" : ""}" aria-pressed="${on}" ${title ? `title="${title}"` : ""}>${label}</button>`;
+    document.body.insertAdjacentHTML("beforeend", `<button type="button" id="ps-fab" class="ps-root" style="display:none;" title="Penlight Assistant を開く" aria-label="Penlight Assistant を開く">${psIcon("pen")}</button>
+      <div id="ps-m" class="ps-root" role="dialog" aria-label="Penlight Assistant">
         <div id="ps-resize-handle" title="ドラッグしてサイズ変更"></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #2f3549;flex-shrink:0;">
-          <b style="font-size:13px;color:#7aa2f7;" title="Penlight Assistant (for MIX PENLa PRO)">Penlight Assistant v${CURRENT_VERSION}</b>
-          <div style="display:flex;gap:4px;">
-            <button id="ps-toggle-opt" class="ps-btn" style="padding:2px 7px;">⚙設定</button>
-            <button id="ps-minimize" class="ps-btn" style="padding:2px 8px;">ー</button>
+        <div class="ps-head">
+          <span class="ps-title" title="Penlight Assistant (for MIX PENLa PRO)">Penlight Assistant<span class="ps-ver">v${CURRENT_VERSION}</span></span>
+          <div class="ps-head-acts">
+            <button type="button" id="ps-toggle-opt" class="ps-btn ps-btn-sm" aria-expanded="false" aria-controls="ps-opt-panel">${psIcon("gear")}設定</button>
+            <button type="button" id="ps-minimize" class="ps-btn ps-btn-sm ps-btn-icon" title="小さくする" aria-label="小さくする">${psIcon("minus")}</button>
           </div>
         </div>
-        <div id="ps-body" style="display:flex;flex-direction:column;gap:6px;flex:1;overflow:hidden;">
-          <div id="ps-opt-panel" style="display:none;background:#1f2335;border:1px solid #3b4261;border-radius:6px;padding:10px;flex-direction:column;flex-shrink:0;">
-            <div class="ps-opt-group">
-              <span class="ps-opt-lbl">並び:</span>
-              <div class="ps-segment" style="flex:1;">
-                <button id="ps-sort-select" class="${this.store.sortMode==="select"?"active":""}">選択順</button>
-                <button id="ps-sort-code" class="${this.store.sortMode==="code"?"active":""}">公式順</button>
-                <button id="ps-sort-preset" class="${this.store.sortMode==="preset"?"active":""}" title="スプシのI列で指定した順">カスタム</button>
+        <div id="ps-body">
+          <div id="ps-opt-panel">
+            <div class="ps-opt-head"><b>設定</b><button type="button" id="ps-opt-close" class="ps-btn ps-btn-sm">閉じる</button></div>
+            <div class="ps-sec">
+              <div class="ps-sec-title">ペンライト</div>
+              <div class="ps-seg" role="radiogroup" aria-label="ペンライトの色数">
+                <label><input type="radio" name="ps-pen-mode" value="361" ${st.penMode === "361" ? "checked" : ""}><span>361色</span></label>
+                <label><input type="radio" name="ps-pen-mode" value="56" ${st.penMode === "56" ? "checked" : ""}><span>56色</span></label>
+              </div>
+              <label class="ps-check" title="スプシの特殊カラー（F〜H列）があるアイドルは、そちらの色で登録します"><input type="checkbox" class="ps-cb" id="ps-toggle-variant" ${st.showVariant ? "checked" : ""}>特殊色を使う<span class="ps-note">（特殊カラーがあるアイドルはその色で登録）</span></label>
+            </div>
+            <div class="ps-sec">
+              <div class="ps-sec-title">まとめ（色数が多いときに）</div>
+              <div class="ps-merge" role="group" aria-label="まとめ方">
+                ${CONFIG.MERGE_OPTIONS.map(o => `<button type="button" data-mopt="${o.id}" aria-pressed="false"><span class="ps-mlabel">${o.label}</span><span class="ps-mcount" data-mcount="${o.id}">-</span></button>`).join("")}
+              </div>
+              <div class="ps-hint" id="ps-merge-hint"></div>
+            </div>
+            <div class="ps-sec">
+              <div class="ps-sec-title">登録の順番</div>
+              <div class="ps-seg" role="group" aria-label="登録の順番">
+                ${segBtn("ps-sort-select", "選んだ順", st.sortMode === "select")}
+                ${segBtn("ps-sort-code", "公式の順", st.sortMode === "code")}
+                ${segBtn("ps-sort-preset", "カスタム", st.sortMode === "preset", "スプシのI列で指定した順")}
               </div>
             </div>
-            <div class="ps-opt-group">
-              <span class="ps-opt-lbl">一覧:</span>
-              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:24px;" title="一覧に出す行">
-                ${[['brand','ブランド','#7aa2f7'],['staff','事務員','#9ece6a'],['unitcolor','ユニット','#ff9e64']].map(([id,lbl,col]) => `<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:#a9b1d6;"><input type="checkbox" id="ps-toggle-${id}" checked style="accent-color:${col};">${lbl}</label>`).join("")}
+            <div class="ps-sec">
+              <div class="ps-sec-title">一覧に出すもの</div>
+              <div class="ps-sec-row">
+                ${[["brand", "ブランド"], ["staff", "事務員"], ["unitcolor", "ユニット"]].map(([id, lbl]) => `<label class="ps-check"><input type="checkbox" class="ps-cb" id="ps-toggle-${id}" checked>${lbl}</label>`).join("")}
               </div>
             </div>
-            <div class="ps-opt-group">
-              <span class="ps-opt-lbl">ペンラ:</span>
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <div class="ps-segment" style="width:140px;">
-                  <label><input type="radio" name="ps-pen-mode" value="361" ${this.store.penMode==="361"?"checked":""}><span>361色</span></label>
-                  <label><input type="radio" name="ps-pen-mode" value="56" ${this.store.penMode==="56"?"checked":""}><span>56色</span></label>
+            <div class="ps-sec">
+              <div class="ps-sec-title">テーマ</div>
+              <div class="ps-seg" role="group" aria-label="テーマ">
+                ${[["auto", "自動"], ["dark", "ダーク"], ["light", "ライト"]].map(([k, l]) => `<button type="button" data-theme="${k}" aria-pressed="false">${l}</button>`).join("")}
+              </div>
+            </div>
+            <div class="ps-sec">
+              <div class="ps-sec-title">リストの保存・読込</div>
+              <div class="ps-sec-row" style="gap:6px;">
+                <button type="button" id="ps-export" class="ps-btn" title="リストをコードにしてコピー">${psIcon("copy")}コードをコピー</button>
+                <button type="button" id="ps-import" class="ps-btn" title="保存コードからリストを復元">${psIcon("load")}コードから読込</button>
+              </div>
+              <div class="ps-note">追加予定のリストを文字のコードにして、別の端末やあとで読み込めます。</div>
+            </div>
+            <div class="ps-sec">
+              <div class="ps-sec-title">カラーデータ</div>
+              <span id="ps-data-info" class="ps-note"></span>
+              <label class="ps-note" for="ps-sheet-id">自分のスプレッドシートを使う（ID）</label>
+              <div style="display:flex;gap:6px;"><input type="text" id="ps-sheet-id" class="ps-input" style="flex:1;min-width:0;" placeholder="空欄で標準のデータ" value="${Utils.escapeHtml(customId)}"><button type="button" id="ps-sheet-save" class="ps-btn ps-btn-primary">適用</button></div>
+            </div>
+          </div>
+          <div id="ps-main">
+            <div class="ps-queue">
+              <div class="ps-qhead">
+                <button type="button" id="ps-queue-toggle" aria-expanded="false" aria-controls="ps-queue-list">追加予定 <b id="ps-queue-count">0</b>名<span id="ps-queue-merged"></span><span id="ps-queue-arrow">${psIcon("chevron")}</span></button>
+                <div class="ps-qacts">
+                  <button type="button" id="ps-extract" class="ps-btn ps-btn-sm" title="出演者の一覧などを貼り付けて、複数名をまとめて追加">${psIcon("paste")}<span class="ps-ext-label">まとめて追加</span></button>
+                  <button type="button" id="ps-clear-queue" class="ps-btn ps-btn-sm ps-btn-danger" title="追加予定をすべて外す">全クリア</button>
                 </div>
-                <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:#a9b1d6;" title="スプシの特殊カラー（F〜H列）があるアイドルは、そちらの色で登録します"><input type="checkbox" id="ps-toggle-variant" ${this.store.showVariant?"checked":""} style="accent-color:#e0af68;">特殊色を使う</label>
               </div>
+              <div class="ps-meter" id="ps-meter" aria-hidden="true"><i></i></div>
+              <div id="ps-limit" class="ps-limit" style="display:none;" role="alert"></div>
+              <div id="ps-queue-list"></div>
             </div>
-            <div class="ps-opt-group" style="border-bottom:none;">
-              <span class="ps-opt-lbl">まとめ:</span>
-              <div class="ps-merge" style="flex:1;min-width:0;">
-                ${CONFIG.MERGE_OPTIONS.map(o => `<button data-mopt="${o.id}"><span class="ps-mlabel">${o.label}</span><span class="ps-mcount" data-mcount="${o.id}">-</span></button>`).join("")}
-              </div>
+            <div class="ps-tools">
+              <select id="ps-b" class="ps-input" aria-label="ブランド">${this.brandOptionsHTML()}</select>
+              <div class="ps-search">${psIcon("search")}<input type="search" id="ps-search" class="ps-input" placeholder="名前で検索" title="全ブランドから名前で検索" aria-label="全ブランドから名前で検索"></div>
+              <button type="button" id="ps-reload" class="ps-btn ps-btn-icon" title="データを再読み込み" aria-label="データを再読み込み">${psIcon("refresh")}</button>
             </div>
-            <div style="margin-top:2px;">
-              <div id="ps-opt-adv-toggle" style="cursor:pointer;font-size:10px;color:#8a93c0;text-align:center;padding:4px;background:#1a1b26;border-radius:4px;">▾ その他（スプシID・抽出・読込/保存）</div>
-              <div id="ps-opt-adv-panel" style="display:none;flex-direction:column;gap:4px;margin-top:6px;padding-top:6px;border-top:1px dashed #2f3549;">
-                <span id="ps-data-info" style="font-size:10px;color:#8a93c0;"></span>
-                <span style="font-size:10px;color:#9aa5ce;">カスタムスプレッドシートID:</span>
-                <div style="display:flex;gap:4px;"><input type="text" id="ps-sheet-id" class="ps-input" style="flex:1;" placeholder="空欄でデフォルト" value="${Utils.escapeHtml(customId)}"><button id="ps-sheet-save" class="ps-btn ps-btn-primary">適用</button></div>
-                <span style="font-size:10px;color:#9aa5ce;margin-top:6px;">リスト操作:</span>
-                <div style="display:flex;gap:4px;flex-wrap:wrap;">
-                  <button id="ps-extract" class="ps-btn" style="background:#3d59a1;color:#fff;" title="出演者のテキストからまとめて追加">📋抽出</button>
-                  <button id="ps-import" class="ps-btn" title="保存コードからリストを復元">読込</button>
-                  <button id="ps-export" class="ps-btn" title="リストをコードにしてコピー">保存</button>
-                </div>
-              </div>
+            <div class="ps-subtools">
+              <div id="ps-unit-chips"></div>
+              <div class="ps-sel-acts"><button type="button" id="ps-sa" class="ps-btn ps-btn-sm ps-sel-btn" title="表示中の一覧をすべて選ぶ">全選択</button><button type="button" id="ps-ca" class="ps-btn ps-btn-sm ps-btn-quiet ps-sel-btn" title="表示中の一覧の選択を外す">全解除</button></div>
             </div>
+            <div id="ps-l"><div class="ps-empty">読込中…</div></div>
           </div>
-          <div style="background:#13141c;border:1px solid #2f3549;border-radius:6px;padding:5px 8px;flex-shrink:0;">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span id="ps-queue-toggle" style="font-size:11px;color:#7dcfff;cursor:pointer;">追加予定: <b id="ps-queue-count">0</b>名<span id="ps-queue-merged" style="margin-left:4px;font-size:10px;"></span> <span id="ps-queue-arrow">▾</span></span>
-              <button id="ps-clear-queue" style="background:none;border:none;color:#f7768e;cursor:pointer;font-size:10px;margin-left:4px;">全クリア</button>
-            </div>
-            <div id="ps-limit" class="ps-limit" style="display:none;"></div>
-            <div id="ps-queue-list" style="display:none;flex-wrap:wrap;gap:4px;overflow-y:auto;margin-top:5px;padding-top:5px;border-top:1px dashed #2f3549;"></div>
-          </div>
-          <div style="display:flex;gap:4px;flex-shrink:0;">
-            <select id="ps-b" class="ps-input" style="flex:1;min-width:0;">${this.brandOptionsHTML()}</select>
-            <input type="search" id="ps-search" class="ps-input" placeholder="名前で検索" title="全ブランドから名前で検索" style="width:120px;">
-            <button id="ps-reload" class="ps-btn" title="再取得・キャッシュクリア" style="padding:4px 8px;">↻</button>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;min-height:22px;">
-            <div id="ps-unit-chips" style="display:none;flex:1;min-width:0;flex-wrap:nowrap;overflow-x:auto;gap:4px;padding:2px 0;"></div>
-            <div style="display:flex;gap:4px;margin-left:auto;flex-shrink:0;"><button id="ps-sa" class="ps-btn ps-sel-btn" title="表示中の一覧をすべて選ぶ">全選択</button><button id="ps-ca" class="ps-btn ps-sel-btn" title="表示中の一覧の選択を外す">全解除</button></div>
-          </div>
-          <div id="ps-l" style="flex:1;overflow-y:auto;background:#13141c;padding:4px;border-radius:4px;min-height:75px;">読込中...</div>
-          <button id="ps-run" class="ps-btn ps-btn-primary" style="width:100%;">リストに追加する</button>
+          <button type="button" id="ps-run" class="ps-btn ps-btn-primary">リストに追加する</button>
         </div>
       </div>
-      
+
       <!-- モーダル・通知エリア -->
-      <div id="ps-toast-container"></div>
-      <div id="ps-modal-overlay">
-        <div id="ps-modal">
+      <div id="ps-toast-container" class="ps-root"></div>
+      <div id="ps-modal-overlay" class="ps-root">
+        <div id="ps-modal" role="dialog" aria-modal="true" aria-labelledby="ps-modal-title">
           <div class="ps-modal-title" id="ps-modal-title"></div>
           <div class="ps-modal-msg" id="ps-modal-msg"></div>
-          <textarea class="ps-modal-input" id="ps-modal-input" rows="3" style="resize:none;"></textarea>
+          <textarea class="ps-modal-input" id="ps-modal-input" rows="4"></textarea>
+          <div class="ps-modal-kbd" id="ps-modal-kbd">Ctrl（⌘）+ Enter でも決定できます</div>
           <div class="ps-modal-actions">
-            <button class="ps-btn" id="ps-modal-cancel">キャンセル</button>
-            <button class="ps-btn ps-btn-primary" id="ps-modal-ok">OK</button>
+            <button type="button" class="ps-btn" id="ps-modal-cancel">キャンセル</button>
+            <button type="button" class="ps-btn ps-btn-primary" id="ps-modal-ok">OK</button>
           </div>
         </div>
       </div>
@@ -263,8 +322,9 @@ class UIManager {
       radios: document.querySelectorAll('input[name="ps-pen-mode"]'),
       mergeBtns: document.querySelectorAll("#ps-m [data-mopt]"), limit: get("ps-limit"), qMerged: get("ps-queue-merged"),
       sort: { select: get("ps-sort-select"), code: get("ps-sort-code"), preset: get("ps-sort-preset") },
-      optBtn: get("ps-toggle-opt"), optPanel: get("ps-opt-panel"), advBtn: get("ps-opt-adv-toggle"), advPanel: get("ps-opt-adv-panel"),
-      sid: get("ps-sheet-id"), save: get("ps-sheet-save"), qTog: get("ps-queue-toggle"), qArr: get("ps-queue-arrow"), chips: get("ps-unit-chips"),
+      optBtn: get("ps-toggle-opt"), optPanel: get("ps-opt-panel"), optClose: get("ps-opt-close"), mergeHint: get("ps-merge-hint"), meter: get("ps-meter"),
+      themeBtns: document.querySelectorAll("#ps-m [data-theme]"),
+      sid: get("ps-sheet-id"), save: get("ps-sheet-save"), qTog: get("ps-queue-toggle"), chips: get("ps-unit-chips"),
       sa: get("ps-sa"), ca: get("ps-ca"), dataInfo: get("ps-data-info")
     };
   }
@@ -283,12 +343,15 @@ class UIManager {
     e.min.onclick = () => { this.savedHeight = e.m.style.height; e.m.style.display = "none"; e.fab.style.display = "flex"; };
     e.fab.onclick = () => { e.fab.style.display = "none"; e.m.style.display = "flex"; e.m.style.height = this.savedHeight || "750px"; };
     
-    e.optBtn.onclick = () => { const show = e.optPanel.style.display === "flex"; e.optPanel.style.display = show ? "none" : "flex"; e.optBtn.style.color = show ? "#a9b1d6" : "#7aa2f7"; };
-    e.advBtn.onclick = () => { const show = e.advPanel.style.display === "flex"; e.advPanel.style.display = show ? "none" : "flex"; e.advBtn.textContent = show ? "▾ その他（スプシID・抽出・読込/保存）" : "▴ その他を閉じる"; };
-    e.qTog.onclick = () => { this.isQueueOpen = !this.isQueueOpen; e.qList.style.display = this.isQueueOpen ? "flex" : "none"; e.qArr.textContent = this.isQueueOpen ? "▴" : "▾"; };
+    // 設定は一覧の代わりに表示する（一覧が押しつぶされない）。閉じると元の画面に戻る
+    const setOpt = open => { e.m.classList.toggle("opt-open", open); e.optBtn.setAttribute("aria-expanded", open); if (open) e.optPanel.scrollTop = 0; };
+    e.optBtn.onclick = () => setOpt(!e.m.classList.contains("opt-open"));
+    e.optClose.onclick = () => { setOpt(false); e.optBtn.focus(); };
+    e.qTog.onclick = () => this.setQueueOpen(!this.isQueueOpen);
+    e.themeBtns.forEach(b => b.onclick = () => { localStorage.setItem(CONFIG.KEYS.THEME, b.dataset.theme); this.applyTheme(); });
     
     Object.entries(e.sort).forEach(([mode, btn]) => {
-      btn.onclick = () => { s.setPref("sortMode", mode, "SORT"); Object.values(e.sort).forEach(b => b.classList.remove("active")); btn.classList.add("active"); this.renderQueue(); };
+      btn.onclick = () => { s.setPref("sortMode", mode, "SORT"); Object.values(e.sort).forEach(b => { b.classList.toggle("active", b === btn); b.setAttribute("aria-pressed", b === btn); }); this.renderQueue(); };
     });
     
     e.toggles.brand.onchange = ev => { s.showBrand = ev.target.checked; this.renderList(); };
@@ -402,7 +465,7 @@ class UIManager {
     });
 
     e.ext.onclick = async () => {
-      const input = await this.openModal({ title: "【自動抽出機能】", message: "公式サイト等のテキストを貼り付けてください。", isPrompt: true, placeholder: "テキストを入力..." });
+      const input = await this.openModal({ title: "まとめて追加", message: "出演者の一覧など、名前が入った文章をそのまま貼り付けてください。\n見つかった人を全員、追加予定に入れます（区切りは改行・読点・スペースなど何でもOK）。", isPrompt: true, placeholder: "例：\n天海春香、如月千早、春日未来\n（公式サイトの出演者欄をコピーして貼り付けてもOK）", okText: "まとめて追加" });
       if (input) await this.extractFromText(input);
     };
 
@@ -410,11 +473,11 @@ class UIManager {
       const data = s.getSortedSelectedList(this.site.getRankCalculator());
       if (!data.length) return this.showToast("エクスポートするリストがありません。", true);
       navigator.clipboard.writeText(btoa(encodeURIComponent(JSON.stringify({ showVariant: s.showVariant, penMode: s.penMode, items: data }))))
-        .then(() => this.showToast("リストのコードをコピーしました！")).catch(() => this.showToast("コピーに失敗しました。", true));
+        .then(() => this.showToast("リストのコードをコピーしました。")).catch(() => this.showToast("コピーに失敗しました。", true));
     };
 
     e.imp.onclick = async () => {
-      const str = await this.openModal({ title: "【リスト読込】", message: "エクスポートしたコードを貼り付けてください:", isPrompt: true });
+      const str = await this.openModal({ title: "コードから読込", message: "「コードをコピー」で保存しておいたコードを貼り付けてください。\n今の追加予定は、読み込んだリストに置き換わります。", isPrompt: true, okText: "読み込む" });
       if (!str) return;
       try {
         const dec = JSON.parse(decodeURIComponent(atob(str)));
@@ -424,7 +487,7 @@ class UIManager {
           s.clearSelection();
           items.forEach(it => { if (it?.n && it?.brand) { s.counter = Math.max(s.counter, it.selectOrder || 0); s.selected.set(`${it.brand}:${it.n}`, it); } });
           this.renderQueue(); this.renderList(); 
-          this.showToast("リストを読み込みました！");
+          this.showToast("リストを読み込みました。");
         } else this.showToast("有効なデータが見つかりません。", true);
       } catch (err) { this.showToast("無効なコードです。", true); }
     };
@@ -433,6 +496,14 @@ class UIManager {
       if (this.app.running) { this.app.abortRequested = true; e.run.textContent = "中断しています..."; return; }
       this.app.executeAutoAdd();
     };
+  }
+
+  // 追加予定の一覧を開く／閉じる
+  setQueueOpen(open) {
+    const e = this.els;
+    this.isQueueOpen = open;
+    e.qList.style.display = open ? "flex" : "none";
+    e.qTog.setAttribute("aria-expanded", open);
   }
 
   // 検索欄の入力。文字があれば全ブランド横断、空なら元のブランドに戻る
@@ -455,7 +526,7 @@ class UIManager {
     // 「、」「,」改行などで区切られた出演者リストなら、名前ごとに照合結果を確認する
     const tokens = String(input).split(/[、,，\n\r\t／\/|｜]+/).map(raw => ({ raw: raw.trim(), key: Utils.normalizeText(raw) })).filter(t => t.key.length > 1);
     const isList = tokens.length >= 2 && tokens.every(t => t.key.length <= 20);
-    const orig = e.ext.textContent; e.ext.textContent = "⏳抽出中..."; e.ext.disabled = true; let added = 0;
+    const lbl = e.ext.querySelector(".ps-ext-label"), orig = lbl.textContent; lbl.textContent = "追加中…"; e.ext.disabled = true; let added = 0;
     try {
       await this.app.ensureAllLoaded();
       const addedNames = new Set([...s.selected.values()].map(it => it.n));
@@ -472,11 +543,7 @@ class UIManager {
       });
 
       // 抽出で1名以上追加されたら、「追加予定」のリストだけ自動で開いて確認しやすくする（ブランドタブは切り替えない）
-      if (added > 0 && !this.isQueueOpen) {
-        this.isQueueOpen = true;
-        e.qList.style.display = "flex";
-        e.qArr.textContent = "▴";
-      }
+      if (added > 0 && !this.isQueueOpen) this.setQueueOpen(true);
       this.renderQueue(); this.renderList();
       const unmatched = isList ? tokens.filter(t => !candidates.some(c => t.key.includes(c.key))).map(t => t.raw) : [];
       if (unmatched.length) {
@@ -485,11 +552,11 @@ class UIManager {
           message: `${added}名を追加しました。\n\n以下の名前はスプレッドシートに見つかりませんでした（未登録・表記ゆれの可能性があります）：\n${unmatched.map(n => `・${n}`).join("\n")}`,
           hideCancel: true
         });
-      } else if (added > 0) this.showToast(`🎉 抽出完了！\n合計 ${added} 名を追加しました。`);
+      } else if (added > 0) this.showToast(`${added}名をまとめて追加予定に入れました。`);
       else this.showToast("一致するアイドルが見つかりませんでした。", true);
     } catch (err) {
-      this.showToast("抽出処理中にエラーが発生しました。", true);
-    } finally { e.ext.textContent = orig; e.ext.disabled = false; }
+      this.showToast("まとめて追加の途中でエラーが発生しました。", true);
+    } finally { lbl.textContent = orig; e.ext.disabled = false; }
     return added;
   }
 
@@ -498,7 +565,8 @@ class UIManager {
     if (this.queueReady) s.saveSelection();   // 起動時の復元が終わるまでは保存しない（前回の分を空で上書きしないため）
     e.qCount.textContent = s.selected.size;
     if (!s.selected.size) {
-      e.qMerged.textContent = ""; e.qList.innerHTML = `<span style="color:#8a93c0;font-size:10px;">未選択</span>`;
+      e.qMerged.textContent = ""; e.qMerged.className = ""; this.setMeter(0);
+      e.qList.innerHTML = `<span class="ps-qempty">まだ選ばれていません。下の一覧で1人ずつ選ぶか、「まとめて追加」で出演者の一覧を貼り付けて一度に入れられます。</span>`;
       e.limit.style.display = "none"; this.renderMergeCounts(null); this.updateRunLabel(0, 0);
       return;
     }
@@ -508,8 +576,9 @@ class UIManager {
 
     // 色数と上限を常に表示（上限-5を超えたら黄、上限超えで赤）
     const colorCount = groups.filter(g => g.pen !== "--").length, max = CONFIG.MAX_COLORS;
-    e.qMerged.textContent = `→ ${colorCount}色 / ${max}`;
-    e.qMerged.style.color = colorCount > max ? "#f7768e" : colorCount > max - 5 ? "#e0af68" : "#9ece6a";
+    e.qMerged.textContent = `・ ${colorCount} / ${max}色`;
+    e.qMerged.className = colorCount > max ? "over" : colorCount > max - 5 ? "near" : "ok";
+    this.setMeter(colorCount);
 
     // 選択肢ごとの色数（設定画面のボタンに表示）と、上限を超えたときの案内
     const counts = this.mergeCounts(sorted, rank);
@@ -518,8 +587,8 @@ class UIManager {
       const sug = this.suggestMerge(counts);
       e.limit.style.display = "block";
       e.limit.innerHTML = sug
-        ? `⚠️ ${max}色を超えています。<button class="ps-btn" data-apply="${sug.opt.id}">「${sug.opt.label}」でまとめる（${sug.count}色）</button>`
-        : `⚠️ ${max}色を超えています。まとめても収まらないので、選択を減らしてください。`;
+        ? `${psIcon("alert")}<span>${max}色を超えています。</span><button type="button" class="ps-btn ps-btn-primary" data-apply="${sug.opt.id}">「${sug.opt.label}」でまとめる（${sug.count}色）</button>`
+        : `${psIcon("alert")}<span>${max}色を超えています。まとめても収まらないので、選択を減らしてください。</span>`;
     } else e.limit.style.display = "none";
     this.updateRunLabel(colorCount, sorted.filter(it => s.getActivePen(it) !== "--").length);
 
@@ -528,8 +597,8 @@ class UIManager {
     const badge = (it, withHandle) => {
       const aCol = Utils.safeColor(s.getActiveColor(it)), aPen = Utils.escapeHtml(s.getActivePen(it)), isSkip = aPen === "--";
       const key = Utils.escapeHtml(`${it.brand}:${it.n}`), n = Utils.escapeHtml(it.n);
-      const handle = withHandle ? `<span class="ps-drag-handle ${canDrag ? '' : 'disabled'}" title="${canDrag ? 'ドラッグして移動' : '自動ソート中は手動移動できません'}">⠿</span>` : "";
-      return `<span class="ps-badge ps-drag-item" data-key="${key}" ${canDrag ? 'draggable="true"' : ''} style="${isSkip ? 'opacity:0.6;' : ''}">${handle}<span class="ps-sw" style="width:7px;height:7px;background:${aCol};"></span><span style="${isSkip ? 'text-decoration:line-through;' : ''}">${n}</span><span class="ps-code">(${aPen})</span><button data-del="${key}" style="background:none;border:none;color:#f7768e;cursor:pointer;padding:0 2px;">✕</button></span>`;
+      const handle = withHandle ? `<span class="ps-drag-handle ${canDrag ? '' : 'disabled'}" title="${canDrag ? 'ドラッグして移動' : '並びが「選んだ順」以外、またはまとめ中は手動で動かせません'}">${psIcon("grip")}</span>` : "";
+      return `<span class="ps-badge ps-drag-item ${isSkip ? 'skip' : ''}" data-key="${key}" ${canDrag ? 'draggable="true"' : ''}>${handle}<span class="ps-sw" style="background:${aCol};"></span><span class="ps-bname">${n}</span><span class="ps-code">${aPen}</span><button type="button" class="ps-del" data-del="${key}" title="外す" aria-label="${n}を外す">${psIcon("close")}</button></span>`;
     };
 
     // まとめなし: 1人ずつ（並べ替え可）
@@ -541,14 +610,22 @@ class UIManager {
       const rawKey = `${g.members[0].brand}:${g.members[0].n}`, open = this.openGroups.has(rawKey);
       const repItem = g.members.find(m => s.getActivePen(m) === g.pen) || g.members[0];
       return `<div class="ps-group ${open ? 'open' : ''}">
-        <div class="ps-group-head" data-gtoggle="${Utils.escapeHtml(rawKey)}">
+        <button type="button" class="ps-group-head" data-gtoggle="${Utils.escapeHtml(rawKey)}" aria-expanded="${open}">
           <span class="ps-sw" style="background:${Utils.safeColor(s.getActiveColor(repItem))};"></span>
-          <span class="ps-group-name">${Utils.escapeHtml(g.n)}</span><span class="ps-code">(${Utils.escapeHtml(g.pen)})</span>
-          <span class="ps-group-meta">${g.label ? Utils.escapeHtml(g.label) + "・" : ""}${g.members.length}名 ${open ? "▴" : "▾"}</span>
-        </div>
+          <span class="ps-group-name">${Utils.escapeHtml(g.n)}</span><span class="ps-code">${Utils.escapeHtml(g.pen)}</span>
+          <span class="ps-group-meta">${g.label ? Utils.escapeHtml(g.label) + "・" : ""}${g.members.length}名${psIcon("chevron")}</span>
+        </button>
         ${open ? `<div class="ps-group-body">${g.members.map(m => badge(m, false)).join("")}</div>` : ""}
       </div>`;
     }).join("");
+  }
+
+  // 追加予定の色数を、上限に対するバーで見せる
+  setMeter(colorCount) {
+    const m = this.els.meter; if (!m) return;
+    const max = CONFIG.MAX_COLORS;
+    m.firstElementChild.style.width = `${Math.min(100, colorCount / max * 100)}%`;
+    m.classList.toggle("over", colorCount > max); m.classList.toggle("near", colorCount <= max && colorCount > max - 5);
   }
 
   // 設定画面の「まとめ」の各ボタンに、まとめた結果の色数を出す（未選択なら「-」）
@@ -583,15 +660,15 @@ class UIManager {
     const units = this.store.getUnits();
     if (!units.length) { this.els.chips.style.display = "none"; this.els.chips.innerHTML = ""; this.store.selectedUnit = ""; return; }
     this.els.chips.style.display = "flex";
-    this.els.chips.innerHTML = `<span class="ps-chip ${!this.store.selectedUnit ? 'active' : ''}" data-unit="">全て</span>` + units.map(u => {
-      const eU = Utils.escapeHtml(u); return `<span class="ps-chip ${this.store.selectedUnit === u ? 'active' : ''}" data-unit="${eU}">${eU}</span>`;
+    this.els.chips.innerHTML = `<button type="button" class="ps-chip ${!this.store.selectedUnit ? 'active' : ''}" data-unit="" aria-pressed="${!this.store.selectedUnit}">全て</button>` + units.map(u => {
+      const eU = Utils.escapeHtml(u), on = this.store.selectedUnit === u; return `<button type="button" class="ps-chip ${on ? 'active' : ''}" data-unit="${eU}" aria-pressed="${on}">${eU}</button>`;
     }).join("");
     this.els.chips.querySelectorAll(".ps-chip").forEach(c => c.onclick = () => { this.store.selectedUnit = c.getAttribute("data-unit"); this.renderUnitChips(); this.renderList(); });
   }
 
   renderList() {
     const list = this.store.getVisibleList(), s = this.store;
-    if (!list.length) { this.els.list.innerHTML = `<span style="color:#f7768e;display:block;padding:6px 0;">一致する項目がありません</span>`; return; }
+    if (!list.length) { this.els.list.innerHTML = `<div class="ps-empty">一致する項目がありません。${s.searchQuery ? "名前の一部だけでも検索できます。" : ""}</div>`; return; }
     const searching = !!s.searchQuery;
     let lastBrand = null;
     this.els.list.innerHTML = list.map(it => {
@@ -601,9 +678,9 @@ class UIManager {
       const key = `${it.brand}:${it.n}`, escKey = Utils.escapeHtml(key), n = Utils.escapeHtml(it.n);
       const isChk = s.selected.has(key), isFav = s.favorites.has(key);
       const tag = it.role === "brand" ? `<span class="ps-tag ps-tag-brand">ブランド</span>` : it.role === "staff" ? `<span class="ps-tag ps-tag-staff">事務員</span>` : it.role === "unit_color" ? `<span class="ps-tag ps-tag-unit">ユニット</span>` : "";
-      const uTag = it.unit && !CONFIG.EXCLUDE_ROLES.includes(it.unit) && it.role === "idol" && !it.n.includes(it.unit) ? `<span style="font-size:9px;color:#8a93c0;margin-left:4px;">[${Utils.escapeHtml(it.unit)}]</span>` : "";
-      const star = `<button type="button" class="ps-star-btn ${isFav ? 'active' : ''}" data-fav="${escKey}" title="推しピン留め">${isFav ? '★' : '☆'}</button>`;
-      return head + `<div class="ps-row ${isChk ? 'selected' : ''}" data-rowkey="${escKey}" style="${isSkip ? 'opacity:0.6;' : ''}"><input type="checkbox" data-key="${escKey}" class="ps-k" ${isChk ? "checked" : ""} ${isSkip ? 'disabled title="未設定"' : ''}>${star}<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${aCol};border:1px solid rgba(255,255,255,0.4);flex-shrink:0;"></span><span class="ps-name-label" data-key="${escKey}" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; ${isSkip ? 'text-decoration:line-through;opacity:0.6;' : ''}">${n}${tag}${uTag}</span><span style="color:${isSkip ? '#f7768e' : '#7dcfff'};font-family:monospace;font-weight:bold;font-size:12px;flex-shrink:0;margin-left:4px;">${aPen}</span></div>`;
+      const uTag = it.unit && !CONFIG.EXCLUDE_ROLES.includes(it.unit) && it.role === "idol" && !it.n.includes(it.unit) ? `<span class="ps-utag">${Utils.escapeHtml(it.unit)}</span>` : "";
+      const star = `<button type="button" class="ps-star-btn ${isFav ? 'active' : ''}" data-fav="${escKey}" title="${isFav ? 'ピン留めを外す' : '推しをピン留め（一覧の上に表示）'}" aria-label="${n}をピン留め" aria-pressed="${isFav}">${psIcon("star")}</button>`;
+      return head + `<div class="ps-row ${isChk ? 'selected' : ''} ${isSkip ? 'skip' : ''}" data-rowkey="${escKey}"><input type="checkbox" data-key="${escKey}" class="ps-k" aria-label="${n}" ${isChk ? "checked" : ""} ${isSkip ? 'disabled title="ペンラコードが未設定です"' : ''}>${star}<span class="ps-swatch" style="background:${aCol};"></span><span class="ps-name-label" data-key="${escKey}">${n}${tag}${uTag}</span><span class="ps-pen ${isSkip ? 'none' : ''}">${aPen}</span></div>`;
     }).join("");
   }
 }

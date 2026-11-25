@@ -2,7 +2,7 @@
  * Penlight Assistant - ブックマークレット用（自動生成ファイル）
  * ※このファイルは GitHub Actions が自動で作ります。直接編集しないでください。
  * 元ファイル: config.js, utils.js, grouper.js, data.js, site.js, styles.js, ui.js, main.js
- * version: 4.6.1 / build: 2026-11-21T10:14:27.206Z
+ * version: 4.6.2 / build: 2026-11-25T19:54:54.087Z
  */
 (() => {
 "use strict";
@@ -13,7 +13,7 @@
  * バージョン、スプシID、しきい値、56色名など。数値の調整はこのファイルだけで完結します。
  */
 
-const CURRENT_VERSION = "4.6.1";
+const CURRENT_VERSION = "4.6.2";
 
 const CONFIG = {
   GITHUB_REPO: "kqkk1/penlight-assistant",
@@ -615,6 +615,8 @@ const PS_STYLES = `
 
   /* ===== パネル本体 ===== */
   #ps-m { position:fixed; top:18px; right:18px; width:500px; height:750px; min-width:280px; min-height:240px; max-width:95vw; max-height:94vh; background:var(--ps-bg); border:1px solid var(--ps-line2); border-radius:16px; box-shadow:var(--ps-shadow); z-index:999999999; padding:12px 14px 14px; display:flex; flex-direction:column; font-size:13px; }
+  /* スクロールする欄では、キーボードで移動したときにフォーカスの枠ごと見える位置まで送る */
+  #ps-body, #ps-opt-panel, #ps-l, #ps-queue-list, #ps-unit-chips { scroll-padding:6px; }
   #ps-m ::-webkit-scrollbar { width:8px; height:8px; }
   #ps-m ::-webkit-scrollbar-track { background:transparent; }
   #ps-m ::-webkit-scrollbar-thumb { background:var(--ps-line2); border-radius:4px; border:2px solid transparent; background-clip:padding-box; }
@@ -625,7 +627,9 @@ const PS_STYLES = `
   .ps-title { font-size:14px; font-weight:700; letter-spacing:.03em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .ps-ver { margin-left:6px; font-size:11px; font-weight:600; color:var(--ps-muted); font-variant-numeric:tabular-nums; }
   .ps-head-acts { margin-left:auto; display:flex; gap:6px; flex-shrink:0; }
-  #ps-body { display:flex; flex-direction:column; gap:10px; flex:1; min-height:0; overflow:hidden; }
+  /* はみ出しを切る欄は、内側に4pxの余白（＋同じだけの負のマージンで見た目の位置は変えない）を持たせ、
+     端にある部品のフォーカスの枠（外側に4px出る）が切れないようにする */
+  #ps-body { display:flex; flex-direction:column; gap:10px; flex:1; min-height:0; overflow:hidden; padding:4px; margin:-4px; }
   #ps-main { display:flex; flex-direction:column; gap:8px; flex:1; min-height:0; }
   #ps-m.opt-open #ps-main { display:none; }
 
@@ -676,7 +680,7 @@ const PS_STYLES = `
   .ps-check { display:inline-flex; align-items:center; gap:7px; min-height:30px; font-size:12px; color:var(--ps-text); cursor:pointer; user-select:none; }
 
   /* ===== 設定画面 ===== */
-  #ps-opt-panel { display:none; flex-direction:column; gap:16px; flex:1; min-height:0; overflow-y:auto; padding:2px 2px 6px; }
+  #ps-opt-panel { display:none; flex-direction:column; gap:16px; flex:1; min-height:0; overflow-y:auto; padding:4px 4px 8px; margin:-2px -2px 0; }
   #ps-m.opt-open #ps-opt-panel { display:flex; }
   .ps-opt-head { display:flex; align-items:center; justify-content:space-between; }
   .ps-opt-head b { font-size:15px; }
@@ -702,7 +706,7 @@ const PS_STYLES = `
   .ps-meter.near i { background:var(--ps-gold); } .ps-meter.over i { background:var(--ps-warn); }
   .ps-limit { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin-top:8px; padding:8px 10px; border-radius:10px; background:var(--ps-warn-soft); color:var(--ps-warn); font-size:12px; font-weight:600; line-height:1.5; }
   .ps-limit .ps-btn { min-height:28px; padding:0 10px; font-size:12px; }
-  #ps-queue-list { display:none; flex-wrap:wrap; gap:6px; max-height:170px; overflow-y:auto; align-content:flex-start; margin-top:8px; padding-top:8px; border-top:1px solid var(--ps-line); }
+  #ps-queue-list { display:none; flex-wrap:wrap; gap:6px; max-height:174px; overflow-y:auto; align-content:flex-start; margin:8px -4px -4px; padding:9px 4px 4px; background:linear-gradient(var(--ps-line),var(--ps-line)) 4px 0 / calc(100% - 8px) 1px no-repeat; }
   .ps-qempty { font-size:12px; color:var(--ps-muted); line-height:1.6; }
   .ps-badge { display:inline-flex; align-items:center; gap:6px; max-width:100%; min-height:30px; padding:2px 2px 2px 8px; border:1px solid var(--ps-line); border-radius:999px; background:var(--ps-surface2); font-size:12px; line-height:1.2; }
   .ps-badge .ps-bname { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -732,8 +736,9 @@ const PS_STYLES = `
   .ps-tools select { flex:1 1 40%; min-width:0; }
   .ps-tools .ps-search { flex:1 1 60%; min-width:0; }
   .ps-subtools { display:flex; align-items:center; gap:8px; flex-shrink:0; min-height:30px; }
-  #ps-unit-chips { display:none; flex:1; min-width:0; flex-wrap:nowrap; overflow-x:auto; gap:6px; padding:1px 0; scrollbar-width:none; }
+  #ps-unit-chips { display:none; flex:1; min-width:0; flex-wrap:nowrap; overflow-x:auto; gap:6px; padding:4px; margin:-4px; scrollbar-width:none; }
   #ps-unit-chips::-webkit-scrollbar { display:none; }
+  #ps-unit-chips .ps-chip:focus-visible { outline-offset:-2px; }   /* 横にスクロールする欄の端でも切れないよう、枠はチップの内側に描く */
   .ps-sel-acts { display:flex; gap:4px; margin-left:auto; flex-shrink:0; }
   .ps-chip { display:inline-flex; align-items:center; min-height:28px; padding:0 12px; border:1px solid var(--ps-line); border-radius:999px; background:transparent; color:var(--ps-muted); font-size:12px; font-weight:600; white-space:nowrap; cursor:pointer; user-select:none; transition:background-color .15s, color .15s, border-color .15s; }
   .ps-chip:hover { color:var(--ps-text); border-color:var(--ps-line2); }
@@ -826,7 +831,7 @@ const PS_STYLES = `
     .ps-chip { min-height:34px; padding:0 14px; font-size:13px; }
     .ps-badge { min-height:34px; font-size:13px; }
     .ps-del { width:30px; height:30px; }
-    #ps-queue-list { max-height:150px !important; }
+    #ps-queue-list { max-height:154px !important; }
     #ps-m .ps-drag-handle { padding:8px 6px; margin:-8px 0 -8px -6px; color:var(--ps-accent); }
     #ps-m .ps-drag-handle.disabled { color:var(--ps-muted); }
     #ps-fab { bottom:16px; right:16px; width:56px; height:56px; }

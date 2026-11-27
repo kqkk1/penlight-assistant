@@ -238,6 +238,7 @@ class UIManager {
                 ${segBtn("ps-sort-code", "公式の順", st.sortMode === "code")}
                 ${segBtn("ps-sort-preset", "カスタム", st.sortMode === "preset", "スプシのI列で指定した順")}
               </div>
+              <div class="ps-note" id="ps-sort-note" style="display:none;">まとめているときは、色の公式の順で登録します。</div>
             </div>
             <div class="ps-sec">
               <div class="ps-sec-title">一覧に出すもの</div>
@@ -564,6 +565,8 @@ class UIManager {
     const e = this.els, s = this.store;
     if (this.queueReady) s.saveSelection();   // 起動時の復元が終わるまでは保存しない（前回の分を空で上書きしないため）
     e.qCount.textContent = s.selected.size;
+    const sortNote = this.els.m.querySelector("#ps-sort-note");   // まとめ中は、並び順の設定に関係なく公式の順になることを知らせる
+    if (sortNote) sortNote.style.display = s.mergeMode !== "none" && s.sortMode !== "code" ? "" : "none";
     if (!s.selected.size) {
       e.qMerged.textContent = ""; e.qMerged.className = ""; this.setMeter(0);
       e.qList.innerHTML = `<span class="ps-qempty">まだ選ばれていません。下の一覧で1人ずつ選ぶか、「まとめて追加」で出演者の一覧を貼り付けて一度に入れられます。</span>`;
@@ -597,7 +600,7 @@ class UIManager {
     const badge = (it, withHandle) => {
       const aCol = Utils.safeColor(s.getActiveColor(it)), aPen = Utils.escapeHtml(s.getActivePen(it)), isSkip = aPen === "--";
       const key = Utils.escapeHtml(`${it.brand}:${it.n}`), n = Utils.escapeHtml(it.n);
-      const handle = withHandle ? `<span class="ps-drag-handle ${canDrag ? '' : 'disabled'}" title="${canDrag ? 'ドラッグして移動' : '並びが「選んだ順」以外、またはまとめ中は手動で動かせません'}">${psIcon("grip")}</span>` : "";
+      const handle = withHandle ? `<span class="ps-drag-handle ${canDrag ? '' : 'disabled'}" title="${canDrag ? 'ドラッグして移動' : '並びが「選んだ順」以外、またはまとめ中（公式の順）は手動で動かせません'}">${psIcon("grip")}</span>` : "";
       return `<span class="ps-badge ps-drag-item ${isSkip ? 'skip' : ''}" data-key="${key}" ${canDrag ? 'draggable="true"' : ''}>${handle}<span class="ps-sw" style="background:${aCol};"></span><span class="ps-bname">${n}</span><span class="ps-code">${aPen}</span><button type="button" class="ps-del" data-del="${key}" title="外す" aria-label="${n}を外す">${psIcon("close")}</button></span>`;
     };
 

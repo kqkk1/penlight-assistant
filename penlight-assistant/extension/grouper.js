@@ -31,9 +31,12 @@ class ColorGrouper {
       if (th != null) clusters = ColorGrouper.completeLinkage(clusters, th);
     }
 
-    // 3) 出力（並び順: 公式順は代表コード順、それ以外は先頭メンバーの位置）
+    // 3) 出力（並び順）
+    //    まとめているとき・「公式の順」のとき: 書き込む色（代表コード）の公式の順
+    //    まとめずに「選んだ順」「カスタム」のとき: 今までどおり、その順番（先頭メンバーの位置）
     const groups = clusters.map(members => ColorGrouper.finalize(members, mode, store.favorites));
-    const key = g => store.sortMode === "code" ? [rankCalc(g.pen), g.firstIdx] : [g.firstIdx, 0];
+    const official = store.sortMode === "code" || mode !== "none";
+    const key = g => official ? [rankCalc(g.pen), g.firstIdx] : [g.firstIdx, 0];
     return groups.sort((a, b) => { const [a1, a2] = key(a), [b1, b2] = key(b); return (a1 - b1) || (a2 - b2); });
   }
 

@@ -5,7 +5,7 @@
  */
 "use strict";
 
-const CURRENT_VERSION = "4.6.2";
+const CURRENT_VERSION = "4.6.3";
 
 const CONFIG = {
   GITHUB_REPO: "kqkk1/penlight-assistant",
@@ -43,7 +43,8 @@ const CONFIG = {
       strong: "同じ系統（頭文字）内でやや離れた色までまとめます"
     }
   },
-  GROUP_ORDER: { R: 1, P: 2, V: 3, B: 4, GB: 5, G: 6, Y: 7, O: 8, W: 9, H: 10, D: 11 },
+  // 公式サイト（PENLa PRO-361）の色の並び順。「公式の順」と、まとめたときの登録順に使う
+  GROUP_ORDER: { R: 1, B: 2, Y: 3, O: 4, D: 5, G: 6, GB: 7, P: 8, V: 9, W: 10, H: 11 },
   EXCLUDE_ROLES: ["ブランド", "事務員", "ユニット"],
   SITE_RULES: {
     BTN_TITLE: "button[title]", 

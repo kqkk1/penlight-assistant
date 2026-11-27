@@ -2,7 +2,7 @@
  * Penlight Assistant - ブックマークレット用（自動生成ファイル）
  * ※このファイルは GitHub Actions が自動で作ります。直接編集しないでください。
  * 元ファイル: config.js, utils.js, grouper.js, data.js, site.js, styles.js, ui.js, main.js
- * version: 4.6.2 / build: 2026-11-25T19:54:54.087Z
+ * version: 4.6.3 / build: 2026-11-27T23:37:36.476Z
  */
 (() => {
 "use strict";
@@ -13,7 +13,7 @@
  * バージョン、スプシID、しきい値、56色名など。数値の調整はこのファイルだけで完結します。
  */
 
-const CURRENT_VERSION = "4.6.2";
+const CURRENT_VERSION = "4.6.3";
 
 const CONFIG = {
   GITHUB_REPO: "kqkk1/penlight-assistant",
@@ -51,7 +51,8 @@ const CONFIG = {
       strong: "同じ系統（頭文字）内でやや離れた色までまとめます"
     }
   },
-  GROUP_ORDER: { R: 1, P: 2, V: 3, B: 4, GB: 5, G: 6, Y: 7, O: 8, W: 9, H: 10, D: 11 },
+  // 公式サイト（PENLa PRO-361）の色の並び順。「公式の順」と、まとめたときの登録順に使う
+  GROUP_ORDER: { R: 1, B: 2, Y: 3, O: 4, D: 5, G: 6, GB: 7, P: 8, V: 9, W: 10, H: 11 },
   EXCLUDE_ROLES: ["ブランド", "事務員", "ユニット"],
   SITE_RULES: {
     BTN_TITLE: "button[title]", 
@@ -209,9 +210,12 @@ class ColorGrouper {
       if (th != null) clusters = ColorGrouper.completeLinkage(clusters, th);
     }
 
-    // 3) 出力（並び順: 公式順は代表コード順、それ以外は先頭メンバーの位置）
+    // 3) 出力（並び順）
+    //    まとめているとき・「公式の順」のとき: 書き込む色（代表コード）の公式の順
+    //    まとめずに「選んだ順」「カスタム」のとき: 今までどおり、その順番（先頭メンバーの位置）
     const groups = clusters.map(members => ColorGrouper.finalize(members, mode, store.favorites));
-    const key = g => store.sortMode === "code" ? [rankCalc(g.pen), g.firstIdx] : [g.firstIdx, 0];
+    const official = store.sortMode === "code" || mode !== "none";
+    const key = g => official ? [rankCalc(g.pen), g.firstIdx] : [g.firstIdx, 0];
     return groups.sort((a, b) => { const [a1, a2] = key(a), [b1, b2] = key(b); return (a1 - b1) || (a2 - b2); });
   }
 
@@ -1083,6 +1087,7 @@ class UIManager {
                 ${segBtn("ps-sort-code", "公式の順", st.sortMode === "code")}
                 ${segBtn("ps-sort-preset", "カスタム", st.sortMode === "preset", "スプシのI列で指定した順")}
               </div>
+              <div class="ps-note" id="ps-sort-note" style="display:none;">まとめているときは、色の公式の順で登録します。</div>
             </div>
             <div class="ps-sec">
               <div class="ps-sec-title">一覧に出すもの</div>
@@ -1409,6 +1414,8 @@ class UIManager {
     const e = this.els, s = this.store;
     if (this.queueReady) s.saveSelection();   // 起動時の復元が終わるまでは保存しない（前回の分を空で上書きしないため）
     e.qCount.textContent = s.selected.size;
+    const sortNote = this.els.m.querySelector("#ps-sort-note");   // まとめ中は、並び順の設定に関係なく公式の順になることを知らせる
+    if (sortNote) sortNote.style.display = s.mergeMode !== "none" && s.sortMode !== "code" ? "" : "none";
     if (!s.selected.size) {
       e.qMerged.textContent = ""; e.qMerged.className = ""; this.setMeter(0);
       e.qList.innerHTML = `<span class="ps-qempty">まだ選ばれていません。下の一覧で1人ずつ選ぶか、「まとめて追加」で出演者の一覧を貼り付けて一度に入れられます。</span>`;
@@ -1442,7 +1449,7 @@ class UIManager {
     const badge = (it, withHandle) => {
       const aCol = Utils.safeColor(s.getActiveColor(it)), aPen = Utils.escapeHtml(s.getActivePen(it)), isSkip = aPen === "--";
       const key = Utils.escapeHtml(`${it.brand}:${it.n}`), n = Utils.escapeHtml(it.n);
-      const handle = withHandle ? `<span class="ps-drag-handle ${canDrag ? '' : 'disabled'}" title="${canDrag ? 'ドラッグして移動' : '並びが「選んだ順」以外、またはまとめ中は手動で動かせません'}">${psIcon("grip")}</span>` : "";
+      const handle = withHandle ? `<span class="ps-drag-handle ${canDrag ? '' : 'disabled'}" title="${canDrag ? 'ドラッグして移動' : '並びが「選んだ順」以外、またはまとめ中（公式の順）は手動で動かせません'}">${psIcon("grip")}</span>` : "";
       return `<span class="ps-badge ps-drag-item ${isSkip ? 'skip' : ''}" data-key="${key}" ${canDrag ? 'draggable="true"' : ''}>${handle}<span class="ps-sw" style="background:${aCol};"></span><span class="ps-bname">${n}</span><span class="ps-code">${aPen}</span><button type="button" class="ps-del" data-del="${key}" title="外す" aria-label="${n}を外す">${psIcon("close")}</button></span>`;
     };
 

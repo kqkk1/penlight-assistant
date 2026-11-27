@@ -35,9 +35,13 @@ class ColorGrouper {
     //    まとめているとき・「公式の順」のとき: 書き込む色（代表コード）の公式の順
     //    まとめずに「選んだ順」「カスタム」のとき: 今までどおり、その順番（先頭メンバーの位置）
     const groups = clusters.map(members => ColorGrouper.finalize(members, mode, store.favorites));
+    //    まとめて「選んだ順」のときは、追加予定の一覧で手で並べ替えた順番を優先する
+    //    （グループの位置＝メンバーの色のうち一番前のもの。まだ並べていない色は、後ろに公式の順で足す）
     const official = store.sortMode === "code" || mode !== "none";
-    const key = g => official ? [rankCalc(g.pen), g.firstIdx] : [g.firstIdx, 0];
-    return groups.sort((a, b) => { const [a1, a2] = key(a), [b1, b2] = key(b); return (a1 - b1) || (a2 - b2); });
+    const order = mode !== "none" && store.sortMode === "select" && Array.isArray(store.groupOrder) ? store.groupOrder : [];
+    const pos = g => { let p = 1e9; g.pens.forEach(c => { const i = order.indexOf(c); if (i >= 0 && i < p) p = i; }); return p; };
+    const key = g => official ? [order.length ? pos(g) : 0, rankCalc(g.pen), g.firstIdx] : [g.firstIdx, 0, 0];
+    return groups.sort((a, b) => { const x = key(a), y = key(b); return (x[0] - y[0]) || (x[1] - y[1]) || (x[2] - y[2]); });
   }
 
   static completeLinkage(clusters, th) {
@@ -82,7 +86,7 @@ class ColorGrouper {
 
   static finalize(members, mode, favorites) {
     const first = members[0];
-    const base = { members: members.map(m => m.it), firstIdx: first.idx };
+    const base = { members: members.map(m => m.it), pens: members.map(m => m.pen).filter(p => p !== "--"), firstIdx: first.idx };
     if (members.length === 1) return { ...base, n: first.it.n, pen: first.pen, label: "" };
 
     // 代表ボタン: OKLab重心に最も近いメンバーのコード

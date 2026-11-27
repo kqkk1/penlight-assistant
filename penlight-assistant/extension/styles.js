@@ -149,6 +149,10 @@ const PS_STYLES = `
   .ps-drag-handle { display:inline-flex; margin-left:-4px; padding:2px; color:var(--ps-muted); cursor:grab; user-select:none; touch-action:none; }
   .ps-drag-handle .ps-ic { width:14px; height:14px; }
   .ps-drag-handle.disabled { cursor:not-allowed; opacity:.3; }
+  .ps-qreset { flex-basis:100%; display:flex; justify-content:flex-end; }
+  .ps-linkbtn { border:0; background:none; padding:4px 2px; font-size:12px; color:var(--ps-accent); cursor:pointer; }
+  .ps-linkbtn:hover { text-decoration:underline; }
+  .ps-group.drag-over { border-color:var(--ps-accent); border-style:dashed; }
   .ps-group { flex-basis:100%; border:1px solid var(--ps-line); border-radius:10px; background:var(--ps-surface2); }
   .ps-group-head { display:flex; align-items:center; gap:6px; width:100%; min-height:34px; padding:4px 10px; border:0; border-radius:10px; background:transparent; font-size:12px; text-align:left; }
   .ps-group-head:hover { background:var(--ps-accent-soft); }

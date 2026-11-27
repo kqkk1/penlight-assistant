@@ -8,6 +8,7 @@
 class Store {
   constructor() {
     this.cache = {}; this.selected = new Map(); this.counter = 0;
+    this.groupOrder = [];   // まとめているときに手で並べ替えた順番（ペンラコードの並び）。空なら公式の順
     this.showBrand = true; this.showStaff = true; this.showUnitColor = true; this.showVariant = false; 
     this.sortMode = localStorage.getItem(CONFIG.KEYS.SORT) || "select";
     this.penMode = localStorage.getItem(CONFIG.KEYS.PEN) || "361";
@@ -39,19 +40,21 @@ class Store {
     this.favorites.has(key) ? this.favorites.delete(key) : this.favorites.add(key);
     localStorage.setItem(CONFIG.KEYS.FAV, JSON.stringify([...this.favorites]));
   }
-  clearSelection() { this.selected.clear(); this.counter = 0; }
+  clearSelection() { this.selected.clear(); this.counter = 0; this.groupOrder = []; }
   // 追加予定を保存しておく（ページの再読み込み・誤操作で消えても戻せるように）。中身は「ブランド:名前」と選んだ順だけ
   saveSelection() {
     try {
       if (!this.selected.size) { localStorage.removeItem(CONFIG.KEYS.QUEUE); return; }
       const keys = [...this.selected.values()].sort((a, b) => (a.selectOrder || 0) - (b.selectOrder || 0)).map(it => `${it.brand}:${it.n}`);
-      localStorage.setItem(CONFIG.KEYS.QUEUE, JSON.stringify({ t: Date.now(), keys }));
+      localStorage.setItem(CONFIG.KEYS.QUEUE, JSON.stringify({ t: Date.now(), keys, go: this.groupOrder }));
     } catch (e) {}
   }
   loadSavedSelection() {
     try {
       const v = JSON.parse(localStorage.getItem(CONFIG.KEYS.QUEUE));
-      return v && Date.now() - v.t < CONFIG.QUEUE_EXPIRY && Array.isArray(v.keys) ? v.keys : [];
+      const ok = v && Date.now() - v.t < CONFIG.QUEUE_EXPIRY && Array.isArray(v.keys);
+      if (ok && Array.isArray(v.go)) this.groupOrder = v.go.filter(x => typeof x === "string");
+      return ok ? v.keys : [];
     } catch (e) { return []; }
   }
   forgetSavedSelection() { localStorage.removeItem(CONFIG.KEYS.QUEUE); }

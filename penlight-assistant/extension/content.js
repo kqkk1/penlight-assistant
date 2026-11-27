@@ -2,7 +2,7 @@
  * Penlight Assistant - ブックマークレット用（自動生成ファイル）
  * ※このファイルは GitHub Actions が自動で作ります。直接編集しないでください。
  * 元ファイル: config.js, utils.js, grouper.js, data.js, site.js, styles.js, ui.js, main.js
- * version: 4.6.3 / build: 2026-11-27T23:37:36.476Z
+ * version: 4.6.3 / build: 2026-11-27T23:49:49.756Z
  */
 (() => {
 "use strict";
@@ -214,9 +214,13 @@ class ColorGrouper {
     //    まとめているとき・「公式の順」のとき: 書き込む色（代表コード）の公式の順
     //    まとめずに「選んだ順」「カスタム」のとき: 今までどおり、その順番（先頭メンバーの位置）
     const groups = clusters.map(members => ColorGrouper.finalize(members, mode, store.favorites));
+    //    まとめて「選んだ順」のときは、追加予定の一覧で手で並べ替えた順番を優先する
+    //    （グループの位置＝メンバーの色のうち一番前のもの。まだ並べていない色は、後ろに公式の順で足す）
     const official = store.sortMode === "code" || mode !== "none";
-    const key = g => official ? [rankCalc(g.pen), g.firstIdx] : [g.firstIdx, 0];
-    return groups.sort((a, b) => { const [a1, a2] = key(a), [b1, b2] = key(b); return (a1 - b1) || (a2 - b2); });
+    const order = mode !== "none" && store.sortMode === "select" && Array.isArray(store.groupOrder) ? store.groupOrder : [];
+    const pos = g => { let p = 1e9; g.pens.forEach(c => { const i = order.indexOf(c); if (i >= 0 && i < p) p = i; }); return p; };
+    const key = g => official ? [order.length ? pos(g) : 0, rankCalc(g.pen), g.firstIdx] : [g.firstIdx, 0, 0];
+    return groups.sort((a, b) => { const x = key(a), y = key(b); return (x[0] - y[0]) || (x[1] - y[1]) || (x[2] - y[2]); });
   }
 
   static completeLinkage(clusters, th) {
@@ -261,7 +265,7 @@ class ColorGrouper {
 
   static finalize(members, mode, favorites) {
     const first = members[0];
-    const base = { members: members.map(m => m.it), firstIdx: first.idx };
+    const base = { members: members.map(m => m.it), pens: members.map(m => m.pen).filter(p => p !== "--"), firstIdx: first.idx };
     if (members.length === 1) return { ...base, n: first.it.n, pen: first.pen, label: "" };
 
     // 代表ボタン: OKLab重心に最も近いメンバーのコード
@@ -309,6 +313,7 @@ class ColorGrouper {
 class Store {
   constructor() {
     this.cache = {}; this.selected = new Map(); this.counter = 0;
+    this.groupOrder = [];   // まとめているときに手で並べ替えた順番（ペンラコードの並び）。空なら公式の順
     this.showBrand = true; this.showStaff = true; this.showUnitColor = true; this.showVariant = false; 
     this.sortMode = localStorage.getItem(CONFIG.KEYS.SORT) || "select";
     this.penMode = localStorage.getItem(CONFIG.KEYS.PEN) || "361";
@@ -340,19 +345,21 @@ class Store {
     this.favorites.has(key) ? this.favorites.delete(key) : this.favorites.add(key);
     localStorage.setItem(CONFIG.KEYS.FAV, JSON.stringify([...this.favorites]));
   }
-  clearSelection() { this.selected.clear(); this.counter = 0; }
+  clearSelection() { this.selected.clear(); this.counter = 0; this.groupOrder = []; }
   // 追加予定を保存しておく（ページの再読み込み・誤操作で消えても戻せるように）。中身は「ブランド:名前」と選んだ順だけ
   saveSelection() {
     try {
       if (!this.selected.size) { localStorage.removeItem(CONFIG.KEYS.QUEUE); return; }
       const keys = [...this.selected.values()].sort((a, b) => (a.selectOrder || 0) - (b.selectOrder || 0)).map(it => `${it.brand}:${it.n}`);
-      localStorage.setItem(CONFIG.KEYS.QUEUE, JSON.stringify({ t: Date.now(), keys }));
+      localStorage.setItem(CONFIG.KEYS.QUEUE, JSON.stringify({ t: Date.now(), keys, go: this.groupOrder }));
     } catch (e) {}
   }
   loadSavedSelection() {
     try {
       const v = JSON.parse(localStorage.getItem(CONFIG.KEYS.QUEUE));
-      return v && Date.now() - v.t < CONFIG.QUEUE_EXPIRY && Array.isArray(v.keys) ? v.keys : [];
+      const ok = v && Date.now() - v.t < CONFIG.QUEUE_EXPIRY && Array.isArray(v.keys);
+      if (ok && Array.isArray(v.go)) this.groupOrder = v.go.filter(x => typeof x === "string");
+      return ok ? v.keys : [];
     } catch (e) { return []; }
   }
   forgetSavedSelection() { localStorage.removeItem(CONFIG.KEYS.QUEUE); }
@@ -726,6 +733,10 @@ const PS_STYLES = `
   .ps-drag-handle { display:inline-flex; margin-left:-4px; padding:2px; color:var(--ps-muted); cursor:grab; user-select:none; touch-action:none; }
   .ps-drag-handle .ps-ic { width:14px; height:14px; }
   .ps-drag-handle.disabled { cursor:not-allowed; opacity:.3; }
+  .ps-qreset { flex-basis:100%; display:flex; justify-content:flex-end; }
+  .ps-linkbtn { border:0; background:none; padding:4px 2px; font-size:12px; color:var(--ps-accent); cursor:pointer; }
+  .ps-linkbtn:hover { text-decoration:underline; }
+  .ps-group.drag-over { border-color:var(--ps-accent); border-style:dashed; }
   .ps-group { flex-basis:100%; border:1px solid var(--ps-line); border-radius:10px; background:var(--ps-surface2); }
   .ps-group-head { display:flex; align-items:center; gap:6px; width:100%; min-height:34px; padding:4px 10px; border:0; border-radius:10px; background:transparent; font-size:12px; text-align:left; }
   .ps-group-head:hover { background:var(--ps-accent-soft); }
@@ -1087,7 +1098,7 @@ class UIManager {
                 ${segBtn("ps-sort-code", "公式の順", st.sortMode === "code")}
                 ${segBtn("ps-sort-preset", "カスタム", st.sortMode === "preset", "スプシのI列で指定した順")}
               </div>
-              <div class="ps-note" id="ps-sort-note" style="display:none;">まとめているときは、色の公式の順で登録します。</div>
+              <div class="ps-note" id="ps-sort-note" style="display:none;"></div>
             </div>
             <div class="ps-sec">
               <div class="ps-sec-title">一覧に出すもの</div>
@@ -1256,15 +1267,31 @@ class UIManager {
       }
     };
 
+    // 並べ替え: まとめていないときは1人ずつ、まとめているときは、まとめた色（グループ）ごと
+    const reorder = (dKey, tKey) => {
+      if (dKey === tKey) return;
+      if (s.mergeMode === "none") s.reorderSelection(dKey, tKey);
+      else {
+        if (s.sortMode !== "select") return;
+        const keyOf = g => g.pen !== "--" ? `g:${g.pen}` : `${g.members[0].brand}:${g.members[0].n}`;
+        const arr = (this.lastGroups || []).slice(), d = arr.findIndex(g => keyOf(g) === dKey), t = arr.findIndex(g => keyOf(g) === tKey);
+        if (d < 0 || t < 0) return;
+        arr.splice(t, 0, arr.splice(d, 1)[0]);
+        s.groupOrder = [...new Set(arr.flatMap(g => g.pens))];
+      }
+      this.renderQueue();
+    };
     let dragKey = null;
     e.qList.addEventListener("dragstart", ev => { if (s.sortMode !== "select") return; const it = ev.target.closest(".ps-drag-item"); if (it) { dragKey = it.getAttribute("data-key"); ev.dataTransfer.effectAllowed = "move"; setTimeout(() => it.classList.add("dragging"), 0); } });
     e.qList.addEventListener("dragover", ev => { if (s.sortMode === "select" && dragKey) { ev.preventDefault(); ev.dataTransfer.dropEffect = "move"; const it = ev.target.closest(".ps-drag-item"); if (it && it.getAttribute("data-key") !== dragKey) it.classList.add("drag-over"); } });
     e.qList.addEventListener("dragleave", ev => ev.target.closest(".ps-drag-item")?.classList.remove("drag-over"));
-    e.qList.addEventListener("drop", ev => { if (s.sortMode === "select" && dragKey) { ev.preventDefault(); const it = ev.target.closest(".ps-drag-item"); if (it) { it.classList.remove("drag-over"); const tKey = it.getAttribute("data-key"); if (dragKey !== tKey) { s.reorderSelection(dragKey, tKey); this.renderQueue(); } } } });
+    e.qList.addEventListener("drop", ev => { if (s.sortMode === "select" && dragKey) { ev.preventDefault(); const it = ev.target.closest(".ps-drag-item"); if (it) { it.classList.remove("drag-over"); const tKey = it.getAttribute("data-key"); reorder(dragKey, tKey); } } });
     e.qList.addEventListener("dragend", ev => { ev.target.closest(".ps-drag-item")?.classList.remove("dragging"); dragKey = null; e.qList.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over")); });
     e.qList.onclick = ev => {
       const delKey = ev.target.closest("button")?.getAttribute("data-del");
       if (delKey) { s.selected.delete(delKey); this.renderQueue(); this.renderList(); return; }
+      if (ev.target.closest("[data-greset]")) { s.groupOrder = []; this.renderQueue(); return; }   // 手で並べ替えたのをやめて、公式の順に戻す
+      if (ev.target.closest(".ps-drag-handle")) return;   // つまみを押しただけでは、グループを開かない
       const gKey = ev.target.closest("[data-gtoggle]")?.getAttribute("data-gtoggle");
       if (gKey) { this.openGroups.has(gKey) ? this.openGroups.delete(gKey) : this.openGroups.add(gKey); this.renderQueue(); }
     };
@@ -1305,10 +1332,7 @@ class UIManager {
       if (lastDragOver) {
         lastDragOver.classList.remove("drag-over");
         const tKey = lastDragOver.getAttribute("data-key");
-        if (touchDragKey !== tKey) {
-          s.reorderSelection(touchDragKey, tKey);
-          this.renderQueue();
-        }
+        reorder(touchDragKey, tKey);
       }
       if (touchDragItem) touchDragItem.classList.remove("dragging");
       touchDragKey = touchDragItem = lastDragOver = null;
@@ -1415,7 +1439,10 @@ class UIManager {
     if (this.queueReady) s.saveSelection();   // 起動時の復元が終わるまでは保存しない（前回の分を空で上書きしないため）
     e.qCount.textContent = s.selected.size;
     const sortNote = this.els.m.querySelector("#ps-sort-note");   // まとめ中は、並び順の設定に関係なく公式の順になることを知らせる
-    if (sortNote) sortNote.style.display = s.mergeMode !== "none" && s.sortMode !== "code" ? "" : "none";
+    if (sortNote) {
+      sortNote.style.display = s.mergeMode !== "none" && s.sortMode !== "code" ? "" : "none";
+      sortNote.textContent = s.sortMode === "select" ? "まとめているときは、色の公式の順で並びます。追加予定の一覧でドラッグすると、まとめた色ごとに並べ替えられます。" : "まとめているときは、色の公式の順で登録します。";
+    }
     if (!s.selected.size) {
       e.qMerged.textContent = ""; e.qMerged.className = ""; this.setMeter(0);
       e.qList.innerHTML = `<span class="ps-qempty">まだ選ばれていません。下の一覧で1人ずつ選ぶか、「まとめて追加」で出演者の一覧を貼り付けて一度に入れられます。</span>`;
@@ -1445,31 +1472,37 @@ class UIManager {
     this.updateRunLabel(colorCount, sorted.filter(it => s.getActivePen(it) !== "--").length);
 
     const merged = s.mergeMode !== "none";
-    const canDrag = s.sortMode === "select" && !merged;
-    const badge = (it, withHandle) => {
+    const canDrag = s.sortMode === "select";   // まとめているときも「選んだ順」なら、まとめた色ごとに手で動かせる
+    const gKeyOf = g => g.pen !== "--" ? `g:${g.pen}` : `${g.members[0].brand}:${g.members[0].n}`;
+    this.lastGroups = groups;
+    const handleHtml = () => `<span class="ps-drag-handle ${canDrag ? '' : 'disabled'}" title="${canDrag ? 'ドラッグして移動' : '並びが「選んだ順」以外のときは手で動かせません'}">${psIcon("grip")}</span>`;
+    // dragKey: 並べ替えの単位のキー（まとめ中は「g:ペンラコード」）。null ならドラッグの対象にしない（グループの中身など）
+    const badge = (it, withHandle, dragKey = `${it.brand}:${it.n}`) => {
       const aCol = Utils.safeColor(s.getActiveColor(it)), aPen = Utils.escapeHtml(s.getActivePen(it)), isSkip = aPen === "--";
       const key = Utils.escapeHtml(`${it.brand}:${it.n}`), n = Utils.escapeHtml(it.n);
-      const handle = withHandle ? `<span class="ps-drag-handle ${canDrag ? '' : 'disabled'}" title="${canDrag ? 'ドラッグして移動' : '並びが「選んだ順」以外、またはまとめ中（公式の順）は手動で動かせません'}">${psIcon("grip")}</span>` : "";
-      return `<span class="ps-badge ps-drag-item ${isSkip ? 'skip' : ''}" data-key="${key}" ${canDrag ? 'draggable="true"' : ''}>${handle}<span class="ps-sw" style="background:${aCol};"></span><span class="ps-bname">${n}</span><span class="ps-code">${aPen}</span><button type="button" class="ps-del" data-del="${key}" title="外す" aria-label="${n}を外す">${psIcon("close")}</button></span>`;
+      const handle = withHandle ? handleHtml() : "";
+      const drag = dragKey !== null, dk = drag ? Utils.escapeHtml(dragKey) : "";
+      return `<span class="ps-badge ${drag ? 'ps-drag-item' : ''} ${isSkip ? 'skip' : ''}" ${drag ? `data-key="${dk}"` : ''} ${drag && canDrag ? 'draggable="true"' : ''}>${handle}<span class="ps-sw" style="background:${aCol};"></span><span class="ps-bname">${n}</span><span class="ps-code">${aPen}</span><button type="button" class="ps-del" data-del="${key}" title="外す" aria-label="${n}を外す">${psIcon("close")}</button></span>`;
     };
 
     // まとめなし: 1人ずつ（並べ替え可）
     if (!merged) { e.qList.innerHTML = sorted.map(it => badge(it, true)).join(""); return; }
 
     // まとめあり: 登録される単位で表示。複数人のグループはタップで中身を開く（スマホでも確認できる）
+    const manual = s.sortMode === "select" && s.groupOrder.length > 0;
     e.qList.innerHTML = groups.map(g => {
-      if (g.members.length === 1) return badge(g.members[0], false);
+      if (g.members.length === 1) return badge(g.members[0], canDrag, gKeyOf(g));
       const rawKey = `${g.members[0].brand}:${g.members[0].n}`, open = this.openGroups.has(rawKey);
       const repItem = g.members.find(m => s.getActivePen(m) === g.pen) || g.members[0];
-      return `<div class="ps-group ${open ? 'open' : ''}">
+      return `<div class="ps-group ps-drag-item ${open ? 'open' : ''}" data-key="${Utils.escapeHtml(gKeyOf(g))}" ${canDrag ? 'draggable="true"' : ''}>
         <button type="button" class="ps-group-head" data-gtoggle="${Utils.escapeHtml(rawKey)}" aria-expanded="${open}">
-          <span class="ps-sw" style="background:${Utils.safeColor(s.getActiveColor(repItem))};"></span>
+          ${canDrag ? handleHtml() : ""}<span class="ps-sw" style="background:${Utils.safeColor(s.getActiveColor(repItem))};"></span>
           <span class="ps-group-name">${Utils.escapeHtml(g.n)}</span><span class="ps-code">${Utils.escapeHtml(g.pen)}</span>
           <span class="ps-group-meta">${g.label ? Utils.escapeHtml(g.label) + "・" : ""}${g.members.length}名${psIcon("chevron")}</span>
         </button>
-        ${open ? `<div class="ps-group-body">${g.members.map(m => badge(m, false)).join("")}</div>` : ""}
+        ${open ? `<div class="ps-group-body">${g.members.map(m => badge(m, false, null)).join("")}</div>` : ""}
       </div>`;
-    }).join("");
+    }).join("") + (manual ? `<div class="ps-qreset"><button type="button" class="ps-linkbtn" data-greset>公式の順に戻す</button></div>` : "");
   }
 
   // 追加予定の色数を、上限に対するバーで見せる

@@ -133,7 +133,22 @@ const PS_STYLES = `
   .ps-meter.near i { background:var(--ps-gold); } .ps-meter.over i { background:var(--ps-warn); }
   .ps-limit { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin-top:8px; padding:8px 10px; border-radius:10px; background:var(--ps-warn-soft); color:var(--ps-warn); font-size:12px; font-weight:600; line-height:1.5; }
   .ps-limit .ps-btn { min-height:28px; padding:0 10px; font-size:12px; }
-  #ps-queue-list { display:none; flex-wrap:wrap; gap:6px; max-height:174px; overflow-y:auto; align-content:flex-start; margin:8px -4px -4px; padding:9px 4px 4px; background:linear-gradient(var(--ps-line),var(--ps-line)) 4px 0 / calc(100% - 8px) 1px no-repeat; }
+  #ps-queue-list { display:none; flex-wrap:wrap; gap:6px; overflow-y:auto; align-content:flex-start; margin:8px -4px -4px; padding:9px 4px 4px; background:linear-gradient(var(--ps-line),var(--ps-line)) 4px 0 / calc(100% - 8px) 1px no-repeat; }
+  /* 閉じているとき: 登録される色を小さな丸で並べる（押すと開く）。2行まで */
+  #ps-qdots { display:none; flex-wrap:wrap; gap:4px; width:100%; max-height:28px; overflow:hidden; margin:6px 0 0; padding:2px 0; border:0; border-radius:6px; background:transparent; cursor:pointer; }
+  #ps-qdots i { flex:none; width:10px; height:10px; border-radius:50%; box-shadow:0 0 0 1px var(--ps-line2); }
+  #ps-qdots i.skip { background:transparent; box-shadow:inset 0 0 0 1.5px var(--ps-muted); }
+  #ps-m:not(.q-open) #ps-qdots.has { display:flex; }
+  #ps-qfoot { display:none; align-items:center; justify-content:flex-end; gap:8px; margin-top:8px; padding-top:8px; border-top:1px solid var(--ps-line); }
+  #ps-qfoot [data-greset], #ps-qfoot .ps-qhint { margin-right:auto; }
+  .ps-qhint { display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--ps-muted); }
+  .ps-qhint .ps-ic { width:14px; height:14px; }
+  #ps-qdone .ps-ic { transform:rotate(180deg); }
+  /* 開いているとき（確認モード）: 一覧・検索を隠し、追加予定をその場所まで広げる */
+  #ps-m.q-open .ps-tools, #ps-m.q-open .ps-subtools, #ps-m.q-open #ps-l { display:none; }
+  #ps-m.q-open .ps-queue { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; }
+  #ps-m.q-open #ps-queue-list { display:flex; flex:1 1 auto; min-height:60px; }
+  #ps-m.q-open #ps-qfoot { display:flex; }
   .ps-qempty { font-size:12px; color:var(--ps-muted); line-height:1.6; }
   .ps-badge { display:inline-flex; align-items:center; gap:6px; max-width:100%; min-height:30px; padding:2px 2px 2px 8px; border:1px solid var(--ps-line); border-radius:999px; background:var(--ps-surface2); font-size:12px; line-height:1.2; }
   .ps-badge .ps-bname { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -146,21 +161,32 @@ const PS_STYLES = `
   .ps-drag-item { transition:opacity .1s, transform .1s; }
   .ps-drag-item.dragging { opacity:.4; transform:scale(.96); }
   .ps-drag-item.drag-over { border-color:var(--ps-accent); border-style:dashed; }
-  .ps-drag-handle { display:inline-flex; margin-left:-4px; padding:2px; color:var(--ps-muted); cursor:grab; user-select:none; touch-action:none; }
+  .ps-drag-handle { display:inline-flex; margin-left:-4px; padding:2px; color:var(--ps-text); opacity:.6; cursor:grab; user-select:none; touch-action:none; }
+  .ps-drag-item[draggable="true"] { cursor:grab; }
+  .ps-drag-item[draggable="true"]:hover .ps-drag-handle, .ps-drag-handle:hover { opacity:1; color:var(--ps-accent); }
   .ps-drag-handle .ps-ic { width:14px; height:14px; }
   .ps-drag-handle.disabled { cursor:not-allowed; opacity:.3; }
-  .ps-qreset { flex-basis:100%; display:flex; justify-content:flex-end; }
   .ps-linkbtn { border:0; background:none; padding:4px 2px; font-size:12px; color:var(--ps-accent); cursor:pointer; }
   .ps-linkbtn:hover { text-decoration:underline; }
+  /* まとめた色: 閉じているときは単体（.ps-badge）と同じ形・同じ高さ。開いたときだけ横いっぱいのパネルになる */
+  .ps-group { display:inline-flex; flex-direction:column; max-width:100%; min-width:0; border:1px solid var(--ps-line); border-radius:999px; background:var(--ps-surface2); }
   .ps-group.drag-over { border-color:var(--ps-accent); border-style:dashed; }
-  .ps-group { flex-basis:100%; border:1px solid var(--ps-line); border-radius:10px; background:var(--ps-surface2); }
-  .ps-group-head { display:flex; align-items:center; gap:6px; width:100%; min-height:34px; padding:4px 10px; border:0; border-radius:10px; background:transparent; font-size:12px; text-align:left; }
+  .ps-group-head { display:inline-flex; align-items:center; gap:6px; max-width:100%; min-height:28px; padding:2px 6px 2px 8px; border:0; border-radius:999px; background:transparent; font-size:12px; line-height:1.2; text-align:left; color:var(--ps-text); }
   .ps-group-head:hover { background:var(--ps-accent-soft); }
-  .ps-group-name { font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .ps-group-meta { margin-left:auto; display:inline-flex; align-items:center; gap:4px; color:var(--ps-muted); font-size:11px; white-space:nowrap; }
-  .ps-group-meta .ps-ic { width:14px; height:14px; transition:transform .2s; }
-  .ps-group.open .ps-group-meta .ps-ic { transform:rotate(180deg); }
+  .ps-group-name { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .ps-gcount { flex-shrink:0; padding:1px 6px; border-radius:999px; background:var(--ps-accent-soft); color:var(--ps-accent); font-size:11px; font-weight:700; white-space:nowrap; }
+  .ps-group-label { margin-left:auto; flex-shrink:0; color:var(--ps-muted); font-size:11px; white-space:nowrap; }
+  .ps-group-chev { display:inline-flex; flex-shrink:0; color:var(--ps-muted); }
+  .ps-group-chev .ps-ic { width:14px; height:14px; transition:transform .2s; }
+  .ps-group.open { flex-basis:100%; border-radius:12px; }
+  .ps-group.open .ps-group-head { display:flex; width:100%; border-radius:11px 11px 0 0; padding:4px 8px; }
+  .ps-group.open .ps-group-chev .ps-ic { transform:rotate(180deg); }
+  .ps-group:not(.open) .ps-group-label + .ps-group-chev, .ps-group.open .ps-group-label ~ .ps-group-chev { margin-left:0; }
+  .ps-group.open .ps-group-chev { margin-left:auto; }
+  .ps-group.open .ps-group-label + .ps-group-chev { margin-left:0; }
   .ps-group-body { display:flex; flex-wrap:wrap; gap:6px; padding:6px 8px 8px; border-top:1px solid var(--ps-line); }
+  .ps-group-title { flex-basis:100%; font-size:11px; color:var(--ps-muted); }
+  .ps-group-title b { color:var(--ps-text); font-weight:600; }
 
   /* ===== ブランド・検索・ユニット ===== */
   .ps-tools { display:flex; gap:6px; flex-shrink:0; }
@@ -261,9 +287,12 @@ const PS_STYLES = `
     .ps-seg > button, .ps-seg > label { min-height:36px; font-size:13px; }
     .ps-chip { min-height:34px; padding:0 14px; font-size:13px; }
     .ps-badge { min-height:34px; font-size:13px; }
+    .ps-group-head { min-height:34px; font-size:13px; }
     .ps-del { width:30px; height:30px; }
-    #ps-queue-list { max-height:154px !important; }
-    #ps-m .ps-drag-handle { padding:8px 6px; margin:-8px 0 -8px -6px; color:var(--ps-accent); }
+    #ps-qdots { gap:5px; max-height:34px; }
+    #ps-qdots i { width:12px; height:12px; }
+    #ps-m.q-open .ps-queue { min-height:calc(100% - 4px); }
+    #ps-m .ps-drag-handle { padding:8px 6px; margin:-8px 0 -8px -6px; color:var(--ps-accent); opacity:1; }
     #ps-m .ps-drag-handle.disabled { color:var(--ps-muted); }
     #ps-fab { bottom:16px; right:16px; width:56px; height:56px; }
     #ps-toast-container { bottom:96px; right:16px; left:16px; align-items:center; }

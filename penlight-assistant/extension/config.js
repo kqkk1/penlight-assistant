@@ -5,7 +5,7 @@
  */
 "use strict";
 
-const CURRENT_VERSION = "4.6.3";
+const CURRENT_VERSION = "4.6.4";
 
 const CONFIG = {
   GITHUB_REPO: "kqkk1/penlight-assistant",

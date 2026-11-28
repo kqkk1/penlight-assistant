@@ -277,8 +277,14 @@ class UIManager {
                 </div>
               </div>
               <div class="ps-meter" id="ps-meter" aria-hidden="true"><i></i></div>
+              <button type="button" id="ps-qdots" aria-label="追加予定を開いて確認する" title="追加予定を開いて確認する"></button>
               <div id="ps-limit" class="ps-limit" style="display:none;" role="alert"></div>
               <div id="ps-queue-list"></div>
+              <div id="ps-qfoot">
+                <span class="ps-qhint" id="ps-qhint" style="display:none;">${psIcon("grip")}ドラッグで並べ替えられます</span>
+                <button type="button" class="ps-linkbtn" data-greset style="display:none;">公式の順に戻す</button>
+                <button type="button" id="ps-qdone" class="ps-btn ps-btn-sm">${psIcon("chevron")}一覧に戻る</button>
+              </div>
             </div>
             <div class="ps-tools">
               <select id="ps-b" class="ps-input" aria-label="ブランド">${this.brandOptionsHTML()}</select>
@@ -325,7 +331,7 @@ class UIManager {
       sort: { select: get("ps-sort-select"), code: get("ps-sort-code"), preset: get("ps-sort-preset") },
       optBtn: get("ps-toggle-opt"), optPanel: get("ps-opt-panel"), optClose: get("ps-opt-close"), mergeHint: get("ps-merge-hint"), meter: get("ps-meter"),
       themeBtns: document.querySelectorAll("#ps-m [data-theme]"),
-      sid: get("ps-sheet-id"), save: get("ps-sheet-save"), qTog: get("ps-queue-toggle"), chips: get("ps-unit-chips"),
+      sid: get("ps-sheet-id"), save: get("ps-sheet-save"), qTog: get("ps-queue-toggle"), qDots: get("ps-qdots"), qFoot: get("ps-qfoot"), chips: get("ps-unit-chips"),
       sa: get("ps-sa"), ca: get("ps-ca"), dataInfo: get("ps-data-info")
     };
   }
@@ -349,6 +355,11 @@ class UIManager {
     e.optBtn.onclick = () => setOpt(!e.m.classList.contains("opt-open"));
     e.optClose.onclick = () => { setOpt(false); e.optBtn.focus(); };
     e.qTog.onclick = () => this.setQueueOpen(!this.isQueueOpen);
+    e.qDots.onclick = () => this.setQueueOpen(true);
+    e.qFoot.onclick = ev => {
+      if (ev.target.closest("[data-greset]")) { s.groupOrder = []; this.renderQueue(); return; }   // 手で並べ替えたのをやめて、公式の順に戻す
+      if (ev.target.closest("#ps-qdone")) { this.setQueueOpen(false); e.qTog.focus(); }
+    };
     e.themeBtns.forEach(b => b.onclick = () => { localStorage.setItem(CONFIG.KEYS.THEME, b.dataset.theme); this.applyTheme(); });
     
     Object.entries(e.sort).forEach(([mode, btn]) => {
@@ -417,7 +428,7 @@ class UIManager {
         const arr = (this.lastGroups || []).slice(), d = arr.findIndex(g => keyOf(g) === dKey), t = arr.findIndex(g => keyOf(g) === tKey);
         if (d < 0 || t < 0) return;
         arr.splice(t, 0, arr.splice(d, 1)[0]);
-        s.groupOrder = [...new Set(arr.flatMap(g => g.pens))];
+        s.groupOrder = [...new Set(arr.flatMap(g => g.pens || []))];
       }
       this.renderQueue();
     };
@@ -430,7 +441,6 @@ class UIManager {
     e.qList.onclick = ev => {
       const delKey = ev.target.closest("button")?.getAttribute("data-del");
       if (delKey) { s.selected.delete(delKey); this.renderQueue(); this.renderList(); return; }
-      if (ev.target.closest("[data-greset]")) { s.groupOrder = []; this.renderQueue(); return; }   // 手で並べ替えたのをやめて、公式の順に戻す
       if (ev.target.closest(".ps-drag-handle")) return;   // つまみを押しただけでは、グループを開かない
       const gKey = ev.target.closest("[data-gtoggle]")?.getAttribute("data-gtoggle");
       if (gKey) { this.openGroups.has(gKey) ? this.openGroups.delete(gKey) : this.openGroups.add(gKey); this.renderQueue(); }
@@ -512,12 +522,15 @@ class UIManager {
     };
   }
 
-  // 追加予定の一覧を開く／閉じる
+  // 追加予定を開く／閉じる。開いているあいだは「確認モード」: 追加予定がアイドルの一覧の場所まで広がり、
+  // 並べ替え・確認をスクロールせずにできる。閉じると一覧に戻り、追加予定は色の丸の列だけを出す
   setQueueOpen(open) {
     const e = this.els;
     this.isQueueOpen = open;
-    e.qList.style.display = open ? "flex" : "none";
+    e.m.classList.toggle("q-open", open);
     e.qTog.setAttribute("aria-expanded", open);
+    e.qTog.title = open ? "閉じて一覧に戻る" : "追加予定を開いて確認する";
+    this.renderQueue();
   }
 
   // 検索欄の入力。文字があれば全ブランド横断、空なら元のブランドに戻る
@@ -585,64 +598,94 @@ class UIManager {
     }
     if (!s.selected.size) {
       e.qMerged.textContent = ""; e.qMerged.className = ""; this.setMeter(0);
-      e.qList.innerHTML = `<span class="ps-qempty">まだ選ばれていません。下の一覧で1人ずつ選ぶか、「まとめて追加」で出演者の一覧を貼り付けて一度に入れられます。</span>`;
+      e.qList.innerHTML = `<span class="ps-qempty">まだ選ばれていません。${this.isQueueOpen ? "「一覧に戻る」で" : "下の一覧で"}1人ずつ選ぶか、「まとめて追加」で出演者の一覧を貼り付けて一度に入れられます。</span>`;
+      e.qDots.innerHTML = ""; e.qDots.classList.remove("has");
+      const rs = e.qFoot.querySelector("[data-greset]"); if (rs) rs.style.display = "none";
+      const qh = e.qFoot.querySelector("#ps-qhint"); if (qh) qh.style.display = "none";
       e.limit.style.display = "none"; this.renderMergeCounts(null); this.updateRunLabel(0, 0);
       return;
     }
-    const rank = this.site.getRankCalculator();
-    const sorted = s.getSortedSelectedList(rank);
-    const groups = ColorGrouper.build(sorted, s, rank);
+    try {
+      const rank = this.site.getRankCalculator();
+      const sorted = s.getSortedSelectedList(rank);
+      const groups = ColorGrouper.build(sorted, s, rank);
 
-    // 色数と上限を常に表示（上限-5を超えたら黄、上限超えで赤）
-    const colorCount = groups.filter(g => g.pen !== "--").length, max = CONFIG.MAX_COLORS;
-    e.qMerged.textContent = `・ ${colorCount} / ${max}色`;
-    e.qMerged.className = colorCount > max ? "over" : colorCount > max - 5 ? "near" : "ok";
-    this.setMeter(colorCount);
+      // 色数と上限を常に表示（上限-5を超えたら黄、上限超えで赤）
+      const colorCount = groups.filter(g => g.pen !== "--").length, max = CONFIG.MAX_COLORS;
+      e.qMerged.textContent = `・ ${colorCount} / ${max}色`;
+      e.qMerged.className = colorCount > max ? "over" : colorCount > max - 5 ? "near" : "ok";
+      this.setMeter(colorCount);
 
-    // 選択肢ごとの色数（設定画面のボタンに表示）と、上限を超えたときの案内
-    const counts = this.mergeCounts(sorted, rank);
-    this.renderMergeCounts(counts);
-    if (colorCount > max) {
-      const sug = this.suggestMerge(counts);
-      e.limit.style.display = "block";
-      e.limit.innerHTML = sug
-        ? `${psIcon("alert")}<span>${max}色を超えています。</span><button type="button" class="ps-btn ps-btn-primary" data-apply="${sug.opt.id}">「${sug.opt.label}」でまとめる（${sug.count}色）</button>`
-        : `${psIcon("alert")}<span>${max}色を超えています。まとめても収まらないので、選択を減らしてください。</span>`;
-    } else e.limit.style.display = "none";
-    this.updateRunLabel(colorCount, sorted.filter(it => s.getActivePen(it) !== "--").length);
+      // 選択肢ごとの色数（設定画面のボタンに表示）と、上限を超えたときの案内
+      const counts = this.mergeCounts(sorted, rank);
+      this.renderMergeCounts(counts);
+      if (colorCount > max) {
+        const sug = this.suggestMerge(counts);
+        e.limit.style.display = "block";
+        e.limit.innerHTML = sug
+          ? `${psIcon("alert")}<span>${max}色を超えています。</span><button type="button" class="ps-btn ps-btn-primary" data-apply="${sug.opt.id}">「${sug.opt.label}」でまとめる（${sug.count}色）</button>`
+          : `${psIcon("alert")}<span>${max}色を超えています。まとめても収まらないので、選択を減らしてください。</span>`;
+      } else e.limit.style.display = "none";
+      this.updateRunLabel(colorCount, sorted.filter(it => s.getActivePen(it) !== "--").length);
 
-    const merged = s.mergeMode !== "none";
-    const canDrag = s.sortMode === "select";   // まとめているときも「選んだ順」なら、まとめた色ごとに手で動かせる
-    const gKeyOf = g => g.pen !== "--" ? `g:${g.pen}` : `${g.members[0].brand}:${g.members[0].n}`;
-    this.lastGroups = groups;
-    const handleHtml = () => `<span class="ps-drag-handle ${canDrag ? '' : 'disabled'}" title="${canDrag ? 'ドラッグして移動' : '並びが「選んだ順」以外のときは手で動かせません'}">${psIcon("grip")}</span>`;
-    // dragKey: 並べ替えの単位のキー（まとめ中は「g:ペンラコード」）。null ならドラッグの対象にしない（グループの中身など）
-    const badge = (it, withHandle, dragKey = `${it.brand}:${it.n}`) => {
-      const aCol = Utils.safeColor(s.getActiveColor(it)), aPen = Utils.escapeHtml(s.getActivePen(it)), isSkip = aPen === "--";
-      const key = Utils.escapeHtml(`${it.brand}:${it.n}`), n = Utils.escapeHtml(it.n);
-      const handle = withHandle ? handleHtml() : "";
-      const drag = dragKey !== null, dk = drag ? Utils.escapeHtml(dragKey) : "";
-      return `<span class="ps-badge ${drag ? 'ps-drag-item' : ''} ${isSkip ? 'skip' : ''}" ${drag ? `data-key="${dk}"` : ''} ${drag && canDrag ? 'draggable="true"' : ''}>${handle}<span class="ps-sw" style="background:${aCol};"></span><span class="ps-bname">${n}</span><span class="ps-code">${aPen}</span><button type="button" class="ps-del" data-del="${key}" title="外す" aria-label="${n}を外す">${psIcon("close")}</button></span>`;
-    };
+      const merged = s.mergeMode !== "none";
+      // 閉じているときに出す、登録される色の丸の列（登録される順）
+      e.qDots.innerHTML = groups.map(g => {
+        const rep = g.members.find(m => s.getActivePen(m) === g.pen) || g.members[0];
+        return g.pen === "--" ? `<i class="skip"></i>` : `<i style="background:${Utils.safeColor(s.getActiveColor(rep))};"></i>`;
+      }).join("");
+      e.qDots.classList.add("has");
+      const canDrag = s.sortMode === "select";   // まとめているときも「選んだ順」なら、まとめた色ごとに手で動かせる
+      {
+        // 下の段の左: 動かせるときは案内、まとめて手で並べ替えた後は「公式の順に戻す」（同じ場所で入れ替わる）
+        const custom = merged && canDrag && (s.groupOrder || []).length > 0;
+        const rs = e.qFoot.querySelector("[data-greset]"), qh = e.qFoot.querySelector("#ps-qhint");
+        if (rs) rs.style.display = custom ? "" : "none";
+        if (qh) qh.style.display = canDrag && !custom && groups.length > 1 ? "" : "none";
+      }
+      const gKeyOf = g => g.pen !== "--" ? `g:${g.pen}` : `${g.members[0].brand}:${g.members[0].n}`;
+      this.lastGroups = groups;
+      const handleHtml = () => `<span class="ps-drag-handle ${canDrag ? '' : 'disabled'}" title="${canDrag ? 'ドラッグして移動' : '並びが「選んだ順」以外のときは手で動かせません'}">${psIcon("grip")}</span>`;
+      // dragKey: 並べ替えの単位のキー（まとめ中は「g:ペンラコード」）。null ならドラッグの対象にしない（グループの中身など）
+      const badge = (it, withHandle, dragKey = `${it.brand}:${it.n}`) => {
+        const aCol = Utils.safeColor(s.getActiveColor(it)), aPen = Utils.escapeHtml(s.getActivePen(it)), isSkip = aPen === "--";
+        const key = Utils.escapeHtml(`${it.brand}:${it.n}`), n = Utils.escapeHtml(it.n);
+        const handle = withHandle ? handleHtml() : "";
+        const drag = dragKey !== null, dk = drag ? Utils.escapeHtml(dragKey) : "";
+        return `<span class="ps-badge ${drag ? 'ps-drag-item' : ''} ${isSkip ? 'skip' : ''}" ${drag ? `data-key="${dk}"` : ''} ${drag && canDrag ? 'draggable="true"' : ''}>${handle}<span class="ps-sw" style="background:${aCol};"></span><span class="ps-bname">${n}</span><span class="ps-code">${aPen}</span><button type="button" class="ps-del" data-del="${key}" title="外す" aria-label="${n}を外す">${psIcon("close")}</button></span>`;
+      };
 
-    // まとめなし: 1人ずつ（並べ替え可）
-    if (!merged) { e.qList.innerHTML = sorted.map(it => badge(it, true)).join(""); return; }
+      // まとめなし: 1人ずつ（並べ替え可）
+      if (!merged) { e.qList.innerHTML = sorted.map(it => badge(it, canDrag)).join(""); return; }
 
-    // まとめあり: 登録される単位で表示。複数人のグループはタップで中身を開く（スマホでも確認できる）
-    const manual = s.sortMode === "select" && s.groupOrder.length > 0;
-    e.qList.innerHTML = groups.map(g => {
-      if (g.members.length === 1) return badge(g.members[0], canDrag, gKeyOf(g));
-      const rawKey = `${g.members[0].brand}:${g.members[0].n}`, open = this.openGroups.has(rawKey);
-      const repItem = g.members.find(m => s.getActivePen(m) === g.pen) || g.members[0];
-      return `<div class="ps-group ps-drag-item ${open ? 'open' : ''}" data-key="${Utils.escapeHtml(gKeyOf(g))}" ${canDrag ? 'draggable="true"' : ''}>
-        <button type="button" class="ps-group-head" data-gtoggle="${Utils.escapeHtml(rawKey)}" aria-expanded="${open}">
-          ${canDrag ? handleHtml() : ""}<span class="ps-sw" style="background:${Utils.safeColor(s.getActiveColor(repItem))};"></span>
-          <span class="ps-group-name">${Utils.escapeHtml(g.n)}</span><span class="ps-code">${Utils.escapeHtml(g.pen)}</span>
-          <span class="ps-group-meta">${g.label ? Utils.escapeHtml(g.label) + "・" : ""}${g.members.length}名${psIcon("chevron")}</span>
-        </button>
-        ${open ? `<div class="ps-group-body">${g.members.map(m => badge(m, false, null)).join("")}</div>` : ""}
-      </div>`;
-    }).join("") + (manual ? `<div class="ps-qreset"><button type="button" class="ps-linkbtn" data-greset>公式の順に戻す</button></div>` : "");
+      // まとめあり: 登録される単位で表示。複数人のグループはタップで中身を開く（スマホでも確認できる）
+      const manual = merged && s.sortMode === "select" && (s.groupOrder || []).length > 0;
+      e.qList.innerHTML = groups.map(g => {
+        if (g.members.length === 1) return badge(g.members[0], canDrag, gKeyOf(g));
+        const rawKey = `${g.members[0].brand}:${g.members[0].n}`, open = this.openGroups.has(rawKey);
+        const repItem = g.members.find(m => s.getActivePen(m) === g.pen) || g.members[0];
+        // まとめた色も、単体と同じ形のボタンにする（どちらも「登録する1色」で対等なため）。
+        // まとめていることは、どのボタンでも同じ位置に出す人数の印と、開く印（∨）で伝える。
+        // 登録される名前（「天ヶ瀬冬馬ら3名」など）は、開いたときに出す
+        // 名前はどのボタンも「代表1人（お気に入りがいればその人、いなければ先頭）」にそろえる。全員の名前は開いたとき・カーソルを乗せたときに出す
+        const cnt = g.members.length, shown = (g.members.find(m => s.favorites.has(`${m.brand}:${m.n}`)) || g.members[0]).n;
+        const tip = `${g.label ? g.label + "・" : ""}${cnt}名: ${g.members.map(m => m.n).join("、")}（押すと中を表示）`;
+        return `<div class="ps-group ps-drag-item ${open ? 'open' : ''}" data-key="${Utils.escapeHtml(gKeyOf(g))}" ${canDrag ? 'draggable="true"' : ''}>
+          <button type="button" class="ps-group-head" data-gtoggle="${Utils.escapeHtml(rawKey)}" aria-expanded="${open}" title="${Utils.escapeHtml(tip)}">
+            ${canDrag ? handleHtml() : ""}<span class="ps-sw" style="background:${Utils.safeColor(s.getActiveColor(repItem))};"></span>
+            <span class="ps-group-name">${Utils.escapeHtml(shown)}</span><span class="ps-code">${Utils.escapeHtml(g.pen)}</span>
+            <span class="ps-gcount">${cnt}名</span>
+            ${open && g.label ? `<span class="ps-group-label">${Utils.escapeHtml(g.label)}</span>` : ""}
+            <span class="ps-group-chev">${psIcon("chevron")}</span>
+          </button>
+          ${open ? `<div class="ps-group-body"><div class="ps-group-title">登録される名前: <b>${Utils.escapeHtml(g.n)}</b></div>${g.members.map(m => badge(m, false, null)).join("")}</div>` : ""}
+        </div>`;
+      }).join("");
+    } catch (err) {
+      // 途中で失敗しても、選んだ人がいるのに「まだ選ばれていません」と出たままにしない
+      console.error("Penlight Assistant: renderQueue failed", err);
+      e.qList.innerHTML = `<span class="ps-qempty">${s.selected.size}名を選んでいますが、追加予定を表示できませんでした。拡張機能を最新版に入れ直してください（ファイルを一部だけ差し替えた場合に起きることがあります）。</span>`;
+    }
   }
 
   // 追加予定の色数を、上限に対するバーで見せる
